@@ -1,0 +1,131 @@
+name: Factura Rapida - Publicar actualizacion segura V3
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version a publicar"
+        required: true
+        default: "0.1.5"
+        type: string
+      notes:
+        description: "Notas visibles de la actualizacion"
+        required: true
+        default: "Mejoras de estabilidad y sistema de actualizaciones."
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Factura Rapida Desktop
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -File -Filter "Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip" | Select-Object -First 1
+          if (-not $zip) {
+            throw "No se encontro Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip"
+          }
+          Expand-Archive -Path $zip.FullName -DestinationPath . -Force
+
+      - name: Validar configuracion de firma
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "Falta TAURI_SIGNING_PRIVATE_KEY"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
+            throw "Falta TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:FR_UPDATER_PUBKEY)) {
+            throw "Falta TAURI_UPDATER_PUBKEY"
+          }
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Preparar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependencias JavaScript
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Agregar dependencia serde_json
+        working-directory: desktop/src-tauri
+        shell: pwsh
+        run: |
+          cargo add serde_json@1
+          if (-not (Select-String -Path "Cargo.toml" -Pattern "serde_json" -Quiet)) {
+            throw "serde_json no quedo agregado a Cargo.toml"
+          }
+          Write-Host "serde_json agregado correctamente."
+
+      - name: Establecer version
+        working-directory: desktop
+        run: node scripts/set-version.mjs "${{ inputs.version }}"
+
+      - name: Sincronizar pagina web
+        working-directory: desktop
+        run: npm run sync-web
+
+      - name: Generar configuracion del actualizador
+        shell: pwsh
+        run: |
+          $config = @{
+            bundle = @{
+              createUpdaterArtifacts = $true
+            }
+            plugins = @{
+              updater = @{
+                pubkey = $env:FR_UPDATER_PUBKEY
+                endpoints = @(
+                  "https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json"
+                )
+              }
+            }
+          }
+
+          $json = $config | ConvertTo-Json -Depth 10
+          Set-Content -Path "desktop/src-tauri/tauri.release.conf.json" -Value $json -Encoding UTF8
+
+          $check = Get-Content "desktop/src-tauri/tauri.release.conf.json" -Raw | ConvertFrom-Json
+          if (-not $check.plugins.updater.pubkey) {
+            throw "No se pudo insertar la clave publica."
+          }
+          if (-not $check.plugins.updater.endpoints) {
+            throw "No se pudo insertar el endpoint."
+          }
+          Write-Host "Configuracion del actualizador validada."
+
+      - name: Compilar, firmar y publicar
+        uses: tauri-apps/tauri-action@action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+        with:
+          projectPath: desktop
+          tagName: "v__VERSION__"
+          releaseName: "Factura Rapida v__VERSION__"
+          releaseBody: "${{ inputs.notes }}"
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterSignatures: true
+          args: "--config src-tauri/tauri.release.conf.json --bundles nsis"
