@@ -1,0 +1,80 @@
+name: Factura Rapida Windows - Publicar actualizacion
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version SemVer, por ejemplo 0.1.3"
+        required: true
+        type: string
+      notes:
+        description: "Notas breves de la actualizacion"
+        required: false
+        default: "Mejoras y correcciones de Factura Rapida."
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Descomprimir proyecto Desktop
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -File -Filter "Factura_Rapida_Desktop_Windows_AUTOUPDATE_0.1.2.zip" | Select-Object -First 1
+          if (-not $zip) { throw "No se encontro el paquete Desktop 0.1.2" }
+          Expand-Archive -Path $zip.FullName -DestinationPath . -Force
+
+      - name: Validar firma de actualizaciones
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw "Falta TAURI_SIGNING_PRIVATE_KEY" }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) { throw "Falta TAURI_SIGNING_PRIVATE_KEY_PASSWORD" }
+          if ([string]::IsNullOrWhiteSpace($env:FR_UPDATER_PUBKEY)) { throw "Falta TAURI_UPDATER_PUBKEY" }
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Preparar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependencias
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Establecer version
+        working-directory: desktop
+        run: node scripts/set-version.mjs "${{ inputs.version }}"
+
+      - name: Sincronizar pagina web
+        working-directory: desktop
+        run: npm run sync-web
+
+      - name: Compilar, firmar y publicar GitHub Release
+        uses: tauri-apps/tauri-action@v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+        with:
+          projectPath: desktop
+          tagName: desktop-v__VERSION__
+          releaseName: "Factura Rapida v__VERSION__"
+          releaseBody: "${{ inputs.notes }}"
+          releaseDraft: false
+          prerelease: false
+          args: "--config src-tauri/tauri.release.conf.json --bundles nsis"

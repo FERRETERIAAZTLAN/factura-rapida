@@ -1,0 +1,68 @@
+name: Factura Rapida Windows 0.1.2 - Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "Factura_Rapida_Desktop_Windows_AUTOUPDATE_0.1.2.zip"
+      - ".github/workflows/windows-autoupdate-build.yml"
+      - "index.html"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Descomprimir proyecto Desktop
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -File -Filter "Factura_Rapida_Desktop_Windows_AUTOUPDATE_0.1.2.zip" | Select-Object -First 1
+          if (-not $zip) { throw "No se encontro el ZIP 0.1.2 de Factura Rapida Desktop" }
+          Write-Host "Usando ZIP: $($zip.Name)"
+          Expand-Archive -Path $zip.FullName -DestinationPath . -Force
+
+      - name: Validar clave publica del actualizador
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:FR_UPDATER_PUBKEY)) {
+            throw "Falta la variable TAURI_UPDATER_PUBKEY en GitHub"
+          }
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Preparar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependencias
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Sincronizar pagina web
+        working-directory: desktop
+        run: npm run sync-web
+
+      - name: Compilar instalador EXE
+        working-directory: desktop
+        run: npx tauri build --bundles nsis
+
+      - name: Guardar instalador EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Factura-Rapida-Windows-0.1.2
+          path: desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14
