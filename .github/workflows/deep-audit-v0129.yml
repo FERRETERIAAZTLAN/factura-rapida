@@ -1,0 +1,109 @@
+name: Deep Audit v0.1.29
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deep-audit-v0129.yml'
+
+permissions:
+  contents: read
+
+env:
+  FR_VERSION: '0.1.29'
+  FR_PRODUCTION_UI_URL: 'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15'
+  FR_PRODUCTION_HEALTH_URL: 'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-production-health?business=AZTLAN'
+
+jobs:
+  deep-audit:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Huella y estructura del Desktop base
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip=Get-Item 'Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip'
+          $sha=(Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "BASE_ZIP_SHA256=$sha"
+          Expand-Archive $zip.FullName . -Force
+          foreach($p in @('desktop/scripts/sync-web.mjs','desktop/scripts/set-version.mjs','desktop/src-tauri/tauri.conf.json','desktop/src-tauri/src/main.rs','desktop/package.json')){if(-not(Test-Path $p)){throw "Falta $p en ZIP base"}}
+
+      - name: Aplicar correcciones permanentes de empaquetado
+        shell: pwsh
+        run: node scripts/prepare-windows-desktop.mjs
+
+      - name: Auditar Tauri y Rust antes del merge
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $t=Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          Write-Host ('TAURI CONFIG: '+($t | ConvertTo-Json -Depth 20 -Compress))
+          if([string]$t.build.frontendDist -ne '../dist'){throw 'frontendDist no es ../dist'}
+          if($t.app.withGlobalTauri -ne $true){throw 'CRITICO: app.withGlobalTauri no está habilitado; window.__TAURI__ no estará disponible en WebView2'}
+          if([string]::IsNullOrWhiteSpace([string]$t.identifier)){throw 'Falta identifier estable de Tauri'}
+          $r=Get-Content desktop/src-tauri/src/main.rs -Raw
+          foreach($m in @('env!("CARGO_PKG_VERSION")','desktop_info','check_for_updates','install_update')){if(-not $r.Contains($m)){throw "Rust no contiene $m"}}
+          if($r.Contains('Factura Rápida Windows v0.1.4')){throw 'Persistió versión 0.1.4 hardcodeada en Rust'}
+          $s=Get-Content desktop/scripts/sync-web.mjs -Raw
+          if(-not $s.Contains('process.env.FR_WEB_SOURCE')){throw 'sync-web no acepta la UI productiva externa'}
+
+      - name: Instalar dependencias Desktop
+        working-directory: desktop
+        shell: pwsh
+        run: npm install --no-audit --no-fund
+
+      - name: Establecer versión y preparar fuente productiva
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Push-Location desktop
+          node scripts/set-version.mjs "$env:FR_VERSION"
+          Pop-Location
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile production-ui-source.html -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'}
+          if((Get-Item production-ui-source.html).Length -lt 50000){throw 'UI productiva descargada es sospechosamente pequeña'}
+
+      - name: Fusionar UI productiva + puentes nativos
+        working-directory: desktop
+        shell: pwsh
+        env:
+          FR_WEB_SOURCE: ${{ github.workspace }}\production-ui-source.html
+        run: npm run sync-web
+
+      - name: Finalizar diagnóstico sin alterar comportamiento
+        shell: pwsh
+        run: node scripts/finalize-windows-html.mjs
+
+      - name: Contratos exactos del HTML final
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $h=Get-Content desktop/dist/index.html -Raw
+          foreach($m in @('data-fr-production-clean="1"','data-fr-webview-debug="1"','id="frNativeBar"','id="frNativeDesktopJs"','window.__TAURI__','desktop_info','check_for_updates','install_update','LOGIN_LOADALL_SLOW','RESTORE_LOADALL_SLOW')){if(-not $h.Contains($m)){throw "Falta contrato final $m"}}
+          foreach($m in @('id="frNativeBar"','id="frNativeDesktopJs"')){$n=([regex]::Matches($h,[regex]::Escape($m))).Count;if($n -ne 1){throw "$m aparece $n veces; debe aparecer exactamente una"}}
+          if($h.Contains('Promise.race([loadAll()')){throw 'Persistió watchdog intrusivo sobre loadAll'}
+          if($h.Contains('Factura Rápida Windows v0.1.4')){throw 'Persistió versión vieja en HTML'}
+
+      - name: Auditoría productiva del HTML final
+        shell: pwsh
+        env:
+          FR_LOCAL_UI_PATH: desktop/dist/index.html
+        run: node tests/production-live-smoke.mjs
+
+      - name: Instalar JSDOM 25
+        shell: pwsh
+        run: npm install --no-save --no-package-lock jsdom@25
+
+      - name: Smoke estricto login base
+        shell: pwsh
+        run: node tests/ui-login-smoke-v15.mjs desktop/dist/index.html
+
+      - name: Smoke profundo de sesión persistida y carrera auth
+        shell: pwsh
+        run: node tests/ui-session-restore-v15.mjs desktop/dist/index.html
