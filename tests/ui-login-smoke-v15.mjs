@@ -21,13 +21,16 @@ assert.ok(!html.includes("function busy(v){loading=v;document.body.classList.tog
 assert.ok(!html.includes("document.body.classList.toggle('loading',v)"), 'Persistió toggle global de loading');
 assert.ok(!html.includes('if(loading)return;busy(true)'), 'El login sigue dependiendo de loading global');
 
-const coreMatch = html.match(/<script>\s*(const API_URL=[\s\S]*?)<\/script>/);
-assert.ok(coreMatch, 'No se encontró script principal de la aplicación');
+// Extrae el script principal COMPLETO. La prueba anterior empezaba en const API_URL
+// y podía omitir helpers definidos unas líneas antes, dando un falso negativo.
+const inlineScripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]);
+const coreScript = inlineScripts.find(s => s.includes('const API_URL=') && s.includes("$('loginForm').onsubmit"));
+assert.ok(coreScript, 'No se encontró script principal completo de la aplicación');
 const cleanMatch = html.match(/<script data-fr-login-clean="1">([\s\S]*?)<\/script>/);
 assert.ok(cleanMatch, 'No se encontró script de recuperación limpia del login');
 
 let base = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-base = base.replace('</body>', `<script>${coreMatch[1]}</script><script>${cleanMatch[1]}</script></body>`);
+base = base.replace('</body>', `<script>${coreScript}</script><script>${cleanMatch[1]}</script></body>`);
 
 let loginCalls = 0;
 const virtualConsole = new VirtualConsole();
@@ -90,7 +93,10 @@ const dom = new JSDOM(base, {
 
 const { window } = dom;
 const doc = window.document;
-await new Promise(r => setTimeout(r, 100));
+await new Promise(r => setTimeout(r, 120));
+
+const fatalAtBoot = jsErrors.filter(e => !String(e?.message || e).includes('Not implemented'));
+assert.equal(fatalAtBoot.length, 0, `La app lanzó errores al iniciar: ${fatalAtBoot.map(e => e?.message || String(e)).join(' | ')}`);
 
 const auth = doc.getElementById('authLayer');
 const shell = doc.querySelector('main.shell');
@@ -117,9 +123,10 @@ assert.equal(user.value, 'admin');
 assert.equal(pin.value, '1234');
 
 const form = doc.getElementById('loginForm');
+assert.equal(typeof form.onsubmit, 'function', 'El formulario debe tener controlador de login activo');
 form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-await new Promise(r => setTimeout(r, 450));
+await new Promise(r => setTimeout(r, 500));
 
 assert.equal(loginCalls, 1, 'Doble submit debe producir una sola solicitud de login');
 assert.ok(auth.classList.contains('hidden'), 'Después de login exitoso la capa debe ocultarse');
@@ -132,10 +139,8 @@ clientesBtn?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await new Promise(r => setTimeout(r, 20));
 assert.ok(!doc.getElementById('tab-clientes')?.classList.contains('hidden'), 'La navegación debe seguir funcionando después del login');
 
-if (jsErrors.length) {
-  const fatal = jsErrors.filter(e => !String(e?.message || e).includes('Not implemented'));
-  assert.equal(fatal.length, 0, `Errores JS inesperados: ${fatal.map(e => e?.message || String(e)).join(' | ')}`);
-}
+const fatal = jsErrors.filter(e => !String(e?.message || e).includes('Not implemented'));
+assert.equal(fatal.length, 0, `Errores JS inesperados: ${fatal.map(e => e?.message || String(e)).join(' | ')}`);
 
 console.log('SMOKE OK: login interactivo bajo loading, doble-submit protegido, sesión carga y navegación responde.');
 dom.window.close();
