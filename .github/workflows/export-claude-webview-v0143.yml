@@ -1,0 +1,160 @@
+name: Export Claude WebView v0.1.43
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/export-claude-webview-v0143.yml'
+
+permissions:
+  contents: read
+
+env:
+  FR_VERSION: "0.1.43"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+  FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
+  FR_V0143_HEAD: "6ab9754500564f124d7d3b29d6dfa96081e888e7"
+
+jobs:
+  export:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exacto del commit usado por v0.1.43
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.FR_V0143_HEAD }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Reconstruir exactamente el dist de v0.1.43
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cmd /c "git show $env:FR_FIX1_COMMIT`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1'}
+          $sha=(Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne '144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134'){throw "Hash FIX1 inesperado $sha"}
+          Expand-Archive FIX1.zip . -Force
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node scripts/ensure-rust-deps-v0143.mjs desktop/src-tauri/Cargo.toml
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Push-Location desktop
+          node scripts/set-version.mjs "$env:FR_VERSION"
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Pop-Location
+
+          $resp=Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile production-source.html -PassThru -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'}
+          $src=Get-Content production-source.html -Raw
+          foreach($m in @('data-fr-production-clean="1"','data-fr-webview-debug="1"','data-fr-facturar-real="8"','data-fr-login-clean="1"','data-fr-usage-ui="1"','data-fr-business-mail-ui="1"','data-fr-issue-delivery="2"')){if(-not $src.Contains($m)){throw "Fuente productiva incompleta: $m"}}
+          $headers=@()
+          foreach($k in $resp.Headers.Keys){$headers += "$k`: $($resp.Headers[$k] -join ', ')"}
+          $headers | Set-Content production-response-headers.txt -Encoding utf8
+          "production_source_sha256=$((Get-FileHash production-source.html -Algorithm SHA256).Hash.ToLowerInvariant())" | Add-Content production-response-headers.txt
+          "production_source_bytes=$((Get-Item production-source.html).Length)" | Add-Content production-response-headers.txt
+
+          $env:FR_WEB_SOURCE=(Resolve-Path production-source.html).Path
+          Push-Location desktop
+          npm run sync-web
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Pop-Location
+          node scripts/sanitize-production-ui-v0142.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+          New-Item -ItemType Directory -Force desktop/dist/vendor | Out-Null
+          $dest='desktop/dist/vendor/xlsx.full.min.js'
+          Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js' -OutFile $dest -UseBasicParsing
+          if((Get-Item $dest).Length -lt 500000){throw 'XLSX incompleto'}
+          node scripts/vendor-windows-xlsx-defer-v0142.mjs desktop/dist/index.html $dest
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+          New-Item -ItemType Directory -Force claude-v0143 | Out-Null
+          Copy-Item desktop/dist/index.html claude-v0143/index-v0.1.43-real-dist.html
+          Copy-Item desktop/dist/vendor/xlsx.full.min.js claude-v0143/xlsx.full.min.js
+          Copy-Item production-response-headers.txt claude-v0143/production-response-headers.txt
+          "dist_index_sha256=$((Get-FileHash desktop/dist/index.html -Algorithm SHA256).Hash.ToLowerInvariant())" | Set-Content claude-v0143/hashes.txt -Encoding utf8
+          "dist_index_bytes=$((Get-Item desktop/dist/index.html).Length)" | Add-Content claude-v0143/hashes.txt
+          "xlsx_sha256=$((Get-FileHash $dest -Algorithm SHA256).Hash.ToLowerInvariant())" | Add-Content claude-v0143/hashes.txt
+          "xlsx_bytes=$((Get-Item $dest).Length)" | Add-Content claude-v0143/hashes.txt
+
+      - name: Generar lista exacta de scripts en orden
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          import fs from 'node:fs';
+          const html=fs.readFileSync('desktop/dist/index.html','utf8');
+          const scripts=[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+          const lines=[];
+          scripts.forEach((m,i)=>{
+            const attrs=m[1].trim();
+            const src=(attrs.match(/\bsrc=["']([^"']+)["']/i)||[])[1]||'';
+            const defer=/\bdefer\b/i.test(attrs);
+            const async=/\basync\b/i.test(attrs);
+            let kind='inline';
+            if(src) kind=/^https?:\/\//i.test(src)?'CDN/remoto':'local';
+            lines.push(`${String(i+1).padStart(2,'0')} | ${kind} | defer=${defer} | async=${async} | src=${src||'(inline)'} | inlineBytes=${Buffer.byteLength(m[2],'utf8')} | attrs=${attrs||'(ninguno)'}`);
+          });
+          fs.writeFileSync('claude-v0143/scripts-en-orden.txt',lines.join('\n')+'\n');
+          console.log(`scripts=${scripts.length}`);
+          '@ | Set-Content list-scripts.mjs -Encoding utf8
+          node list-scripts.mjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+      - name: Agregar log exacto de la corrida fallida v0.1.43
+        shell: pwsh
+        run: |
+          @'
+          RUN_ID=33251512084
+          JOB_ID=99097878243
+          STEP=Probar EXE real - carga completa DOM hit-test y foco
+
+          START 0.1.43
+          SETUP_OK 0.1.43
+          PAGE_LOAD Started http://tauri.localhost/
+          WEBVIEW_MILESTONE HEAD_SCRIPT_STARTED {"readyState":"loading","href":"http://tauri.localhost/"}
+
+          No hubo ninguna linea posterior en factura-rapida-startup.log durante los 75 segundos de espera.
+          No aparecieron:
+          PAGE_LOAD Finished
+          WEBVIEW_MILESTONE DOM_CONTENT_LOADED
+          WEBVIEW_MILESTONE LOGIN_HIT_FOCUS_OK
+          LOGIN_UI_READY
+
+          La aplicacion no se cerro por si sola durante la espera; el workflow la detuvo en finally al fallar la aceptacion.
+          '@ | Set-Content claude-v0143/factura-rapida-startup-v0.1.43.log -Encoding utf8
+
+          @'
+          NOTA DE TRAZABILIDAD
+
+          Este paquete reconstruye el dist usando exactamente el commit de workflow v0.1.43:
+          6ab9754500564f124d7d3b29d6dfa96081e888e7
+          y la base FIX1:
+          73ff1fa0d4345d492278eef5f2dc836e7ece7695
+
+          Secuencia aplicada, igual a la corrida v0.1.43:
+          1. Recuperar FIX1.
+          2. rebase-fix1-native-v0142.mjs.
+          3. ensure-rust-deps-v0143.mjs.
+          4. set-version 0.1.43.
+          5. Descargar factura-desktop-production-ui-v15.
+          6. sync-web.
+          7. sanitize-production-ui-v0142.mjs.
+          8. Empaquetar XLSX 0.18.5 local y aplicar defer.
+
+          El run original no guardo el dist como artifact porque la prueba del EXE fallo antes del paso de assets.
+          Por ello este HTML es una reconstruccion determinista con el mismo codigo y la misma URL productiva.
+          production-response-headers.txt incluye el encabezado y SHA del origen productivo recuperado en esta reconstruccion para verificar su identidad/version.
+          '@ | Set-Content claude-v0143/LEEME-trazabilidad.txt -Encoding utf8
+
+      - name: Subir paquete para Claude
+        uses: actions/upload-artifact@v4
+        with:
+          name: Paquete-Claude-WebView-v0.1.43
+          path: claude-v0143
+          retention-days: 7
