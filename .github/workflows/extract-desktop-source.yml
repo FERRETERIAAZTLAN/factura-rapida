@@ -1,0 +1,35 @@
+name: Extract Desktop Source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/extract-desktop-source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract base desktop source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf extracted desktop-source
+          mkdir extracted desktop-source
+          unzip -q Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip -d extracted
+          test -f extracted/desktop/src-tauri/src/main.rs
+          test -f extracted/desktop/src-tauri/tauri.conf.json
+          test -f extracted/desktop/src-tauri/Cargo.toml
+          cp extracted/desktop/src-tauri/src/main.rs desktop-source/main.rs
+          cp extracted/desktop/src-tauri/tauri.conf.json desktop-source/tauri.conf.json
+          cp extracted/desktop/src-tauri/Cargo.toml desktop-source/Cargo.toml
+          cp extracted/desktop/scripts/sync-web.mjs desktop-source/sync-web.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-source
+          path: desktop-source
+          retention-days: 1
