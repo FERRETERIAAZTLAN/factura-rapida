@@ -87,8 +87,10 @@ for (let i = 0; i < scripts.length; i++) {
   }
 }
 
-const active = html.match(/<script data-fr-facturar-real="8">([\s\S]*?)<\/script>/i);
-assert.ok(active, 'No se encontró el controlador fiscal activo');
+// El controlador fiscal puede quedar diferido con type=application/fr-postdom para no
+// participar en el parser de WebView2. Aun así auditamos exactamente su cuerpo y orden.
+const active = html.match(/<script\b(?=[^>]*data-fr-facturar-real=["']8["'])[^>]*>([\s\S]*?)<\/script>/i);
+assert.ok(active, 'No se encontró el controlador fiscal productivo');
 const flow = active[1];
 const tokens = [
   "api('saveDraft',{draft:payload})",
