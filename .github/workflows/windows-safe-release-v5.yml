@@ -1,5 +1,3 @@
-name: Factura Rapida - Publicar actualizacion segura V5
-
 on:
   workflow_dispatch:
 
@@ -140,12 +138,22 @@ jobs:
             if ($html.Contains($bad)) { throw "El HTML final contiene contenido prohibido: $bad" }
           }
 
-          $tauri = Get-Content "desktop/src-tauri/tauri.conf.json" -Raw
-          if ($tauri -notmatch '"frontDist"\s*:\s*"\.\./dist"') {
-            throw "Tauri no apunta a ../dist; se cancela para evitar empaquetar otra interfaz."
+          $tauriPath = "desktop/src-tauri/tauri.conf.json"
+          if (-not (Test-Path $tauriPath)) { throw "No existe desktop/src-tauri/tauri.conf.json" }
+
+          $tauri = Get-Content $tauriPath -Raw | ConvertFrom-Json
+          $frontendDist = [string]$tauri.build.frontendDist
+
+          if ([string]::IsNullOrWhiteSpace($frontendDist)) {
+            throw "tauri.conf.json no define build.frontendDist; se cancela."
           }
 
-          Write-Host "desktop/dist/index.html es PRODUCCION limpia y contiene FACTURAR."
+          $normalizedFrontendDist = $frontendDist.Replace("\\", "/").TrimEnd("/")
+          if ($normalizedFrontendDist -ne "../dist") {
+            throw "Tauri apunta a '$frontendDist' y no a ../dist; se cancela para evitar empaquetar otra interfaz."
+          }
+
+          Write-Host "desktop/dist/index.html es PRODUCCION limpia, contiene FACTURAR y Tauri build.frontendDist apunta a ../dist."
 
       - name: Generar configuracion del actualizador
         shell: pwsh
