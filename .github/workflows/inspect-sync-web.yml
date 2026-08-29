@@ -1,0 +1,27 @@
+name: Inspect sync-web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-sync-web.yml'
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expandir desktop base
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip=Get-ChildItem -File -Filter 'Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip' | Select-Object -First 1
+          if(-not $zip){ throw 'No se encontro ZIP base' }
+          Expand-Archive $zip.FullName . -Force
+      - name: Mostrar sync-web y set-version completos
+        shell: pwsh
+        run: |
+          Write-Host '=== sync-web.mjs ==='
+          Get-Content desktop/scripts/sync-web.mjs -Raw
+          Write-Host '=== set-version.mjs ==='
+          Get-Content desktop/scripts/set-version.mjs -Raw
