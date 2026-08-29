@@ -1,0 +1,138 @@
+name: Factura Rapida - Audit FIX1 baseline for v0.1.42
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/audit-fix1-baseline-v0142.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit-fix1:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout con historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Recuperar exactamente FIX1 confirmado por usuario
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $commit='73ff1fa0d4345d492278eef5f2dc836e7ece7695'
+          cmd /c "git show $commit`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1 del commit histórico'}
+          if((Get-Item FIX1.zip).Length -lt 10000){throw 'FIX1.zip incompleto'}
+          New-Item -ItemType Directory -Force fix1 | Out-Null
+          Expand-Archive FIX1.zip fix1 -Force
+          if(-not(Test-Path fix1/desktop)){throw 'FIX1 no contiene desktop'}
+          Write-Host "FIX1_SHA256=$((Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "FIX1_BYTES=$((Get-Item FIX1.zip).Length)"
+
+      - name: Recuperar base posterior SAFE 0.1.4 para comparar
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          if(-not(Test-Path 'Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip')){throw 'No existe SAFE 0.1.4 en main'}
+          New-Item -ItemType Directory -Force safe014 | Out-Null
+          Expand-Archive 'Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip' safe014 -Force
+
+      - name: Inventario exacto de archivos y hashes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          function Manifest($root,$out){
+            Get-ChildItem $root -Recurse -File | Sort-Object FullName | ForEach-Object {
+              $rel=$_.FullName.Substring((Resolve-Path $root).Path.Length+1).Replace('\','/')
+              $sha=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              "$rel`t$($_.Length)`t$sha"
+            } | Set-Content $out -Encoding utf8
+          }
+          Manifest 'fix1' 'fix1-manifest.txt'
+          Manifest 'safe014' 'safe014-manifest.txt'
+          Write-Host '=== FIX1 MANIFEST ==='
+          Get-Content fix1-manifest.txt
+          Write-Host '=== SAFE014 MANIFEST ==='
+          Get-Content safe014-manifest.txt
+
+      - name: Revisar archivos fuente de FIX1 con numero de linea
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $files=@(
+            'fix1/desktop/package.json',
+            'fix1/desktop/scripts/sync-web.mjs',
+            'fix1/desktop/src-tauri/tauri.conf.json',
+            'fix1/desktop/src-tauri/Cargo.toml',
+            'fix1/desktop/src-tauri/src/main.rs',
+            'fix1/desktop/dist/index.html',
+            'fix1/desktop/README.md'
+          )
+          foreach($f in $files){
+            if(Test-Path $f){
+              Write-Host "=== BEGIN $f ==="
+              $n=0; Get-Content $f | ForEach-Object {$n++; Write-Host (('{0,4}: {1}' -f $n,$_))}
+              Write-Host "=== END $f ==="
+            }
+          }
+
+      - name: Comparar FIX1 contra SAFE 0.1.4 linea por linea
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          $rels=@(
+            'desktop/package.json',
+            'desktop/scripts/sync-web.mjs',
+            'desktop/src-tauri/tauri.conf.json',
+            'desktop/src-tauri/Cargo.toml',
+            'desktop/src-tauri/src/main.rs',
+            'desktop/dist/index.html',
+            'desktop/README.md'
+          )
+          foreach($rel in $rels){
+            $a=Join-Path fix1 $rel; $b=Join-Path safe014 $rel
+            Write-Host "=== DIFF $rel ==="
+            if((Test-Path $a) -and (Test-Path $b)){
+              git diff --no-index --no-ext-diff --unified=80 -- $a $b
+              $global:LASTEXITCODE=0
+            } else { Write-Host "MISSING a=$((Test-Path $a)) b=$((Test-Path $b))" }
+          }
+
+      - name: Validar sintaxis del baseline sin modificarlo
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $html=Get-Content fix1/desktop/dist/index.html -Raw
+          Set-Content fix1-inline-check.mjs @'
+          import fs from 'node:fs'; import vm from 'node:vm';
+          const html=fs.readFileSync('fix1/desktop/dist/index.html','utf8');
+          const scripts=[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+          let checked=0;
+          for(let i=0;i<scripts.length;i++){
+            const src=(scripts[i][1].match(/\bsrc=["']([^"']+)/i)||[])[1];
+            if(src) continue;
+            new vm.Script(scripts[i][2],{filename:`fix1-inline-${i+1}.js`}); checked++;
+          }
+          console.log(`FIX1_INLINE_JS_OK scripts=${scripts.length} inline_checked=${checked}`);
+          '@ -Encoding utf8
+          node fix1-inline-check.mjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+      - name: Guardar reporte de auditoria
+        uses: actions/upload-artifact@v4
+        with:
+          name: fix1-baseline-audit-v0142
+          path: |
+            fix1-manifest.txt
+            safe014-manifest.txt
+            FIX1.zip
+          retention-days: 7
