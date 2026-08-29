@@ -19,6 +19,9 @@ for (const marker of [
 
 assert.ok(!html.includes("document.body.classList.toggle('loading',v)"), 'Persistió toggle global de loading');
 assert.ok(!html.includes('if(loading)return;busy(true)'), 'El login sigue dependiendo de loading global');
+assert.ok(!html.includes('window.frStampDraftDirect=frStampDraftDirect'), 'Persistió ruta fiscal legacy directa');
+assert.ok(!html.includes('function addRealStampButtons()'), 'Persistió controlador fiscal legacy de botones');
+assert.ok(!html.includes("cfdiApi('timber',{draftId:d.id})"), 'Persistió timbrado directo fuera de cfdi-issue-api');
 
 const inlineScripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]);
 const coreScript = inlineScripts.find(s => s.includes('const API_URL=') && s.includes("$('loginForm').onsubmit"));
@@ -31,6 +34,7 @@ base = base.replace('</body>', `<script>${coreScript}</script><script>${cleanMat
 let loginCalls = 0;
 const virtualConsole = new VirtualConsole();
 const jsErrors = [];
+const errText = e => [e?.message, e?.cause?.stack, e?.detail?.stack, e?.stack].filter(Boolean).join('\n');
 virtualConsole.on('jsdomError', e => jsErrors.push(e));
 virtualConsole.on('error', e => jsErrors.push(e));
 function response(data,status=200){return{ok:status>=200&&status<300,status,async json(){return data},async text(){return JSON.stringify(data)},async blob(){return new Blob([JSON.stringify(data)],{type:'application/json'})}}}
@@ -48,7 +52,7 @@ const dom = new JSDOM(base,{url:'https://factura-rapida.local/',runScripts:'dang
 }});
 
 const {window}=dom,doc=window.document;await new Promise(r=>setTimeout(r,120));
-const fatalAtBoot=jsErrors.filter(e=>!String(e?.message||e).includes('Not implemented'));assert.equal(fatalAtBoot.length,0,`Errores al iniciar: ${fatalAtBoot.map(e=>e?.message||String(e)).join(' | ')}`);
+const fatalAtBoot=jsErrors.filter(e=>!String(e?.message||e).includes('Not implemented'));assert.equal(fatalAtBoot.length,0,`Errores al iniciar:\n${fatalAtBoot.map(errText).join('\n---\n')}`);
 const auth=doc.getElementById('authLayer'),shell=doc.querySelector('main.shell'),form=doc.getElementById('loginForm');
 assert.ok(auth&&!auth.classList.contains('hidden'),'El login debe iniciar visible');assert.equal(typeof form?.onsubmit,'function','Handler de login requerido');
 
@@ -72,5 +76,5 @@ assert.ok(!shell?.classList.contains('frWorking'),'Interfaz desbloqueada tras lo
 assert.match(doc.getElementById('currentUser')?.textContent||'',/Admin Prueba/,'Sesión simulada debe renderizar usuario');
 const clientesBtn=doc.querySelector('button[data-tab="clientes"]');clientesBtn?.dispatchEvent(new window.MouseEvent('click',{bubbles:true}));await new Promise(r=>setTimeout(r,20));
 assert.ok(!doc.getElementById('tab-clientes')?.classList.contains('hidden'),'Navegación debe responder después del login');
-const fatal=jsErrors.filter(e=>!String(e?.message||e).includes('Not implemented'));assert.equal(fatal.length,0,`Errores JS: ${fatal.map(e=>e?.message||String(e)).join(' | ')}`);
+const fatal=jsErrors.filter(e=>!String(e?.message||e).includes('Not implemented'));assert.equal(fatal.length,0,`Errores JS:\n${fatal.map(errText).join('\n---\n')}`);
 console.log('SMOKE V15 OK: body.loading reproducido sin focus, campos escribibles, auth interactiva, doble-submit protegido, sesión y navegación OK.');dom.window.close();
