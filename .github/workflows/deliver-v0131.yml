@@ -1,0 +1,45 @@
+name: Deliver Factura Rapida v0.1.31 Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deliver-v0131.yml'
+
+permissions:
+  contents: read
+
+env:
+  FR_VERSION: "0.1.31"
+  FR_EXE_SHA256: "5b5c9b047125d5845523c61f6c73ad65c20addc69bbd0b11a05d3edd66640bd6"
+
+jobs:
+  deliver:
+    runs-on: windows-latest
+    steps:
+      - name: Descargar y verificar instalador estable publicado
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo='${{ github.repository }}'
+          $tag="v$env:FR_VERSION"
+          $name="Factura.Rapida_$env:FR_VERSION`_x64-setup.exe"
+          $release=Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$tag" -Headers @{'User-Agent'='Factura-Rapida-delivery'}
+          if($release.draft -or $release.prerelease){ throw 'El release no es estable' }
+          $asset=$release.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+          if(-not $asset){ throw 'No se encontro el EXE publicado' }
+          New-Item -ItemType Directory -Force delivery | Out-Null
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "delivery/$name" -UseBasicParsing
+          $hash=(Get-FileHash "delivery/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($hash -ne $env:FR_EXE_SHA256){ throw "Hash inesperado: $hash" }
+          Write-Host "DELIVERY VERIFIED $name SHA256=$hash"
+
+      - name: Empaquetar instalador verificado como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: Factura-Rapida-v0.1.31-installer
+          path: delivery/Factura.Rapida_0.1.31_x64-setup.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
