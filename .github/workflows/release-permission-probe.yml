@@ -1,0 +1,37 @@
+name: Release Permission Probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-permission-probe.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probar create release y limpiar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          tag="permission-probe-${RUN_ID}"
+          cleanup() {
+            set +e
+            rid=$(gh api -H 'Accept: application/vnd.github+json' "/repos/${REPO}/releases/tags/${tag}" --jq '.id' 2>/dev/null)
+            if [ -n "${rid:-}" ]; then gh api --method DELETE "/repos/${REPO}/releases/${rid}" >/dev/null 2>&1 || true; fi
+            gh api --method DELETE "/repos/${REPO}/git/refs/tags/${tag}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          printf '{"tag_name":"%s","target_commitish":"%s","name":"permission probe","body":"temporary permission probe","draft":true,"prerelease":true}' "$tag" "$SHA" > payload.json
+          echo 'CREATE_RELEASE_PROBE_BEGIN'
+          gh api --method POST -H 'Accept: application/vnd.github+json' "/repos/${REPO}/releases" --input payload.json --jq '{id,tag_name,draft,prerelease}'
+          echo 'CREATE_RELEASE_PROBE_OK'
