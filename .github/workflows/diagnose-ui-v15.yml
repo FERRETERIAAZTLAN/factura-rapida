@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/diagnose-ui-v15.yml'
+      - 'tests/ui-login-smoke-v15.mjs'
 
 permissions:
   contents: read
