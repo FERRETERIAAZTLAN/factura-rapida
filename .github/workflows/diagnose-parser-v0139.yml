@@ -1,0 +1,52 @@
+name: Factura Rapida - Diagnose Parser v0.1.39
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-parser-v0139.yml'
+
+permissions:
+  contents: read
+
+env:
+  FR_VERSION: "0.1.39"
+  FR_WEBVIEW_PROFILE: "webview-profile-v9"
+  FR_STORAGE_BOOT_MODE: "isolated-profile"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Preparar HTML exacto sin diferir scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip=Get-ChildItem -File -Filter 'Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip' | Select-Object -First 1
+          if(-not $zip){throw 'No se encontro ZIP base'}
+          Expand-Archive $zip.FullName . -Force
+          node scripts/prepare-windows-desktop.mjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile production-source.html -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'}
+          $env:FR_WEB_SOURCE=(Resolve-Path production-source.html).Path
+          Push-Location desktop
+          npm run sync-web
+          Pop-Location
+          node scripts/finalize-windows-html.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node scripts/guard-windows-login-v0135.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node scripts/reorder-windows-login-guard-v0137.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+      - name: Analizar cada script y API bloqueante
+        shell: pwsh
+        run: |
+          node scripts/analyze-parser-v0139.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
