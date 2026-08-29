@@ -32,6 +32,21 @@ for (const marker of ['desktop_info', 'check_for_updates', 'install_update']) {
   if (!rust.includes(marker)) throw new Error(`main.rs: falta comando nativo requerido: ${marker}`);
 }
 
+const uiReadyCommand = `#[tauri::command]\nfn login_ui_ready(report: String) -> Result<(), String> {\n    let safe: String = report.chars().take(4000).collect();\n    let safe = safe.replace('\\n', \" \").replace('\\r', \" \" );\n    write_startup_log(&format!(\"LOGIN_UI_READY {}\", safe));\n    Ok(())\n}\n\n`;
+if (!rust.includes('fn login_ui_ready(')) {
+  const mainNeedle = 'fn main() {';
+  if (!rust.includes(mainNeedle)) throw new Error('main.rs: no se encontró fn main para agregar handshake del login');
+  rust = rust.replace(mainNeedle, uiReadyCommand + mainNeedle);
+}
+
+if (!rust.includes('login_ui_ready')) throw new Error('main.rs: no se agregó comando login_ui_ready');
+if (!/generate_handler!\[[\s\S]*login_ui_ready[\s\S]*\]/.test(rust)) {
+  const handlerNeedle = `            install_update\n        ])`;
+  const handlerPatch = `            install_update,\n            login_ui_ready\n        ])`;
+  if (!rust.includes(handlerNeedle)) throw new Error('main.rs: no se encontró generate_handler esperado para agregar login_ui_ready');
+  rust = rust.replace(handlerNeedle, handlerPatch);
+}
+
 const setupNeedle = `    tauri::Builder::default()\n        .setup(|_| {`;
 const pageLoadPatch = `    tauri::Builder::default()\n        .on_page_load(|_, payload| {\n            write_startup_log(&format!(\"PAGE_LOAD {:?} {}\", payload.event(), payload.url()));\n        })\n        .setup(|_| {`;
 if (rust.includes(setupNeedle)) rust = rust.replace(setupNeedle, pageLoadPatch);
@@ -47,4 +62,4 @@ mainWindow.dataDirectory = webviewProfile;
 mainWindow.incognito = false;
 await writeFile(tauriPath, JSON.stringify(tauri, null, 2) + '\n', 'utf8');
 
-console.log(`PREPARE WINDOWS DESKTOP OK: perfil WebView2 aislado=${webviewProfile}, puente window.__TAURI__ expuesto y page-load nativo instrumentado.`);
+console.log(`PREPARE WINDOWS DESKTOP OK: perfil WebView2 aislado=${webviewProfile}, puente window.__TAURI__ expuesto, page-load instrumentado y handshake login_ui_ready disponible.`);
