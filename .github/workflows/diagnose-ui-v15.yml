@@ -1,0 +1,33 @@
+name: Diagnose UI v15 JavaScript
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-ui-v15.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Descargar UI productiva v15
+        shell: pwsh
+        run: Invoke-WebRequest -Uri 'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15' -OutFile ui.html -UseBasicParsing
+      - name: Localizar script inválido
+        shell: pwsh
+        run: |
+          @'
+          const fs=require('fs'),vm=require('vm');
+          const h=fs.readFileSync('ui.html','utf8');
+          const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+          let m,i=0,bad=0;
+          while((m=re.exec(h))){i++;const s=m[1];try{new vm.Script(s,{filename:`inline-${i}.js`});console.log(`OK inline-${i} len=${s.length}`)}catch(e){bad++;console.error(`BAD inline-${i} len=${s.length}`);console.error(e.stack);const lines=s.split(/\r?\n/);const lm=String(e.stack).match(/inline-\d+\.js:(\d+)/);const n=lm?Number(lm[1]):0;if(n){for(let j=Math.max(1,n-4);j<=Math.min(lines.length,n+4);j++)console.error(`${j}: ${lines[j-1]}`)}}}
+          if(bad)process.exit(1);
+          '@ | Set-Content diagnose.cjs -Encoding UTF8
+          node diagnose.cjs
