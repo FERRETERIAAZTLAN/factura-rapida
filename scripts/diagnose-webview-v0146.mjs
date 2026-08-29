@@ -78,6 +78,10 @@ const mainPos = rust.indexOf('fn main()');
 if (mainPos < 0) throw new Error('No se encontró fn main() en Rust');
 rust = rust.slice(0, mainPos) + helper + '\n' + rust.slice(mainPos);
 
+const setupClosure = '.setup(|_| {';
+if (!rust.includes(setupClosure)) throw new Error('No se encontró closure setup FIX1 esperado');
+rust = rust.replace(setupClosure, '.setup(|app| {');
+
 const setupMarker = 'write_startup_log(&format!("SETUP_OK {}", env!("CARGO_PKG_VERSION")));';
 if (!rust.includes(setupMarker)) throw new Error('No se encontró SETUP_OK esperado para iniciar sonda nativa');
 rust = rust.replace(setupMarker, `${setupMarker}\n            start_native_title_probe(app.handle().clone());`);
