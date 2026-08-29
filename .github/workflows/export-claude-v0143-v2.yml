@@ -1,0 +1,61 @@
+name: Export Claude v0.1.43 v2
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/export-claude-v0143-v2.yml'
+permissions:
+  contents: read
+env:
+  FR_VERSION: '0.1.43'
+  FR_FIX1_COMMIT: '73ff1fa0d4345d492278eef5f2dc836e7ece7695'
+jobs:
+  export:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Rebuild exact v0.1.43 source state
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cmd /c "git show $env:FR_FIX1_COMMIT`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          $sha=(Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne '144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134'){throw 'FIX1 hash mismatch'}
+          Expand-Archive FIX1.zip . -Force
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node scripts/ensure-rust-deps-v0143.mjs desktop/src-tauri/Cargo.toml
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Push-Location desktop/src-tauri
+          cargo generate-lockfile
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Pop-Location
+          Push-Location desktop
+          node scripts/set-version.mjs $env:FR_VERSION
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Pop-Location
+      - name: Package requested files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force claude | Out-Null
+          Copy-Item desktop/src-tauri/Cargo.toml claude/Cargo.toml
+          Copy-Item desktop/src-tauri/src/main.rs claude/main.rs
+          Copy-Item desktop/src-tauri/tauri.conf.json claude/tauri.conf.json
+          Copy-Item desktop/src-tauri/Cargo.lock claude/Cargo.lock
+          Get-Content claude/Cargo.lock | Select-String -Pattern 'name = "tauri"','name = "tauri-plugin-updater"','name = "serde"','name = "serde_json"' -Context 1,4 | Out-File claude/Cargo.lock-relevant.txt -Encoding utf8
+          Set-Content claude/README.txt 'Archivos exactos reconstruidos para v0.1.43 desde FIX1 y el parche Rust v0.1.43. Revisar Cargo.toml, main.rs, tauri.conf.json y Cargo.lock.' -Encoding utf8
+          Compress-Archive -Path claude/* -DestinationPath Paquete_Claude_v0.1.43_Rust_Tauri.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Paquete-Claude-v0.1.43-Rust-Tauri
+          path: Paquete_Claude_v0.1.43_Rust_Tauri.zip
+          retention-days: 7
