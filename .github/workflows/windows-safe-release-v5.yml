@@ -230,11 +230,11 @@ jobs:
           if ($release.draft -ne $true) { throw "La release no esta en borrador; se cancela." }
 
           $exe = $release.assets | Where-Object { $_.name -match '\.exe$' } | Select-Object -First 1
-          $sig = $release.assets | Where-Object { $_.name -match '\.exe\.sig$' } | Select-Object -First 1
+          $sigAssets = @($release.assets | Where-Object { $_.name -match '\.sig$' })
           $latest = $release.assets | Where-Object { $_.name -eq 'latest.json' } | Select-Object -First 1
 
           if (-not $exe) { throw "Falta el instalador .exe." }
-          if (-not $sig) { throw "Falta la firma .exe.sig." }
+          if ($sigAssets.Count -lt 1) { throw "Falta al menos una firma .sig." }
           if (-not $latest) { throw "Falta latest.json." }
 
           $assetHeaders = @{
@@ -250,20 +250,95 @@ jobs:
           if ([string]$j.version -ne $env:FR_VERSION) {
             throw "latest.json anuncia $($j.version), no $env:FR_VERSION."
           }
-          if ($raw -notmatch '\.exe') {
-            throw "latest.json no apunta a un instalador .exe."
+
+          if (-not $j.platforms) {
+            throw "latest.json no contiene el objeto platforms requerido por Tauri."
           }
-          if ($raw -notmatch '"signature"') {
-            throw "latest.json no contiene firma del actualizador."
+
+          $windowsEntries = @()
+          foreach ($property in $j.platforms.PSObject.Properties) {
+            if ($property.Name -like 'windows-*') {
+              $entry = $property.Value
+              if ($entry -and
+                  -not [string]::IsNullOrWhiteSpace([string]$entry.url) -and
+                  -not [string]::IsNullOrWhiteSpace([string]$entry.signature)) {
+                $windowsEntries += [PSCustomObject]@{
+                  Name = $property.Name
+                  Url = [string]$entry.url
+                  Signature = [string]$entry.signature
+                }
+              }
+            }
+          }
+
+          if ($windowsEntries.Count -lt 1) {
+            throw "latest.json no contiene una entrada Windows con URL y firma."
           }
 
           $expectedTagPath = "/releases/download/v$env:FR_VERSION/"
-          if ($raw -notmatch [regex]::Escape($expectedTagPath)) {
-            throw "latest.json no apunta al tag v$env:FR_VERSION."
+          $validWindowsEntry = $null
+          $validUpdaterAsset = $null
+          $validSigAsset = $null
+
+          foreach ($entry in $windowsEntries) {
+            if ($entry.Url -notmatch [regex]::Escape($expectedTagPath)) {
+              continue
+            }
+
+            try {
+              $uri = [System.Uri]$entry.Url
+              $assetNameFromUrl = [System.Uri]::UnescapeDataString($uri.Segments[-1])
+            } catch {
+              continue
+            }
+
+            # Tauri v2 puede actualizar directamente con NSIS .exe.
+            # Instalaciones antiguas/compatibles pueden usar .nsis.zip.
+            if ($assetNameFromUrl -notmatch '(\.exe|\.nsis\.zip)$') {
+              continue
+            }
+
+            $matchingAsset = $release.assets | Where-Object {
+              $_.name -eq $assetNameFromUrl
+            } | Select-Object -First 1
+
+            if (-not $matchingAsset) {
+              continue
+            }
+
+            $matchingSigAsset = $release.assets | Where-Object {
+              $_.name -eq "$assetNameFromUrl.sig"
+            } | Select-Object -First 1
+
+            if (-not $matchingSigAsset) {
+              continue
+            }
+
+            $validWindowsEntry = $entry
+            $validUpdaterAsset = $matchingAsset
+            $validSigAsset = $matchingSigAsset
+            break
+          }
+
+          if (-not $validWindowsEntry) {
+            throw "latest.json no apunta a un actualizador Windows existente (.exe o .nsis.zip) dentro del tag v$env:FR_VERSION con su firma .sig correspondiente."
+          }
+
+          # Comprobar que la firma embebida en latest.json coincide exactamente
+          # con el archivo .sig subido al mismo borrador.
+          Invoke-WebRequest -Uri $validSigAsset.url -OutFile "updater.verify.sig" -Headers $assetHeaders -UseBasicParsing
+          $sigFileContent = (Get-Content "updater.verify.sig" -Raw).Trim()
+          $jsonSignature = ([string]$validWindowsEntry.Signature).Trim()
+
+          if ([string]::IsNullOrWhiteSpace($sigFileContent)) {
+            throw "La firma .sig descargada esta vacia."
+          }
+          if ($sigFileContent -ne $jsonSignature) {
+            throw "La firma de latest.json no coincide con el archivo .sig del actualizador Windows."
           }
 
           "RELEASE_ID=$($release.id)" >> $env:GITHUB_ENV
-          Write-Host "Release borrador, instalador, firma y latest.json validados correctamente."
+          Write-Host "Release borrador validado: instalador .exe presente, actualizador Windows existente, firma .sig coincidente y latest.json version $env:FR_VERSION apuntando al tag v$env:FR_VERSION."
 
       - name: Publicar SOLO despues de todas las verificaciones
         shell: pwsh
