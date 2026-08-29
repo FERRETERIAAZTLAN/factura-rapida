@@ -28,6 +28,7 @@ jobs:
           cp extracted/desktop/src-tauri/tauri.conf.json desktop-source/tauri.conf.json
           cp extracted/desktop/src-tauri/Cargo.toml desktop-source/Cargo.toml
           cp extracted/desktop/scripts/sync-web.mjs desktop-source/sync-web.mjs
+          echo "extraction requested for v0.1.33 diagnostics" > desktop-source/request.txt
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-source
