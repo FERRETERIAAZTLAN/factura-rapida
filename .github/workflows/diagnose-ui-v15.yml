@@ -1,6 +1,7 @@
 name: Diagnose UI v15 JavaScript
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -16,18 +17,42 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - name: Descargar UI productiva v15
-        shell: pwsh
-        run: Invoke-WebRequest -Uri 'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15' -OutFile ui.html -UseBasicParsing
-      - name: Localizar script inválido
+      - name: Trazar cadena UI v8 a v15
         shell: pwsh
         run: |
+          $ErrorActionPreference='Continue'
+          $base='https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1'
+          $names=@('factura-desktop-production-ui-v8','factura-desktop-production-ui-v9','factura-desktop-production-ui-v10','factura-desktop-production-ui-v12','factura-desktop-production-ui-v15')
+          $failed=$false
+          foreach($name in $names){
+            try{
+              $r=Invoke-WebRequest -Uri "$base/$name" -UseBasicParsing -TimeoutSec 30
+              Write-Host "OK $name status=$($r.StatusCode) bytes=$($r.RawContentLength) marker=$($r.Headers['X-Factura-Rapida-UI'])"
+              $r.Content | Set-Content "$name.html" -Encoding UTF8
+            }catch{
+              $failed=$true
+              $status='?'; try{$status=[int]$_.Exception.Response.StatusCode}catch{}
+              $body=''; try{$body=$_.ErrorDetails.Message}catch{}
+              Write-Error "FAIL $name status=$status body=$body"
+            }
+          }
+          if($failed){throw 'Se rompió al menos un eslabón de la cadena UI'}
+      - name: Localizar cualquier script inválido
+        shell: pwsh
+        run: |
+          Copy-Item factura-desktop-production-ui-v15.html ui.html -Force
           @'
           const fs=require('fs'),vm=require('vm');
           const h=fs.readFileSync('ui.html','utf8');
           const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
           let m,i=0,bad=0;
-          while((m=re.exec(h))){i++;const s=m[1];try{new vm.Script(s,{filename:`inline-${i}.js`});console.log(`OK inline-${i} len=${s.length}`)}catch(e){bad++;console.error(`BAD inline-${i} len=${s.length}`);console.error(e.stack);const lines=s.split(/\r?\n/);const lm=String(e.stack).match(/inline-\d+\.js:(\d+)/);const n=lm?Number(lm[1]):0;if(n){for(let j=Math.max(1,n-4);j<=Math.min(lines.length,n+4);j++)console.error(`${j}: ${lines[j-1]}`)}}}
+          while((m=re.exec(h))){
+            i++;const s=m[1];
+            try{new vm.Script(s,{filename:`inline-${i}.js`});console.log(`OK inline-${i} len=${s.length}`)}
+            catch(e){bad++;console.error(`BAD inline-${i} len=${s.length}`);console.error(e.stack);const lines=s.split(/\r?\n/);const lm=String(e.stack).match(/inline-\d+\.js:(\d+)/);const n=lm?Number(lm[1]):0;if(n){for(let j=Math.max(1,n-4);j<=Math.min(lines.length,n+4);j++)console.error(`${j}: ${lines[j-1]}`)}}
+          }
+          if(!i)throw Error('No se encontraron scripts inline');
           if(bad)process.exit(1);
+          console.log(`TODOS LOS SCRIPTS OK (${i})`);
           '@ | Set-Content diagnose.cjs -Encoding UTF8
           node diagnose.cjs
