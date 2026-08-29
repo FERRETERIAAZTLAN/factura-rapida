@@ -1,0 +1,28 @@
+name: Retract v0.1.28
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/retract-v0128.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  retract:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retirar release v0.1.28
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.1.28 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete v0.1.28 --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            echo 'v0.1.28 retirada'
+          else
+            echo 'v0.1.28 ya no existe'
+          fi
