@@ -84,14 +84,6 @@ jobs:
           foreach ($x in $required) { if (-not $html.Contains($x)) { throw "Falta contrato obligatorio: $x" } }
           $forbidden = @('>Finkok · DEMO<','Producción está bloqueada.','id="finkokSmokeBtn"','id="sandboxCsdForm"')
           foreach ($x in $forbidden) { if ($html.Contains($x)) { throw "Contenido DEMO visible/prohibido: $x" } }
-          $iSave=$html.IndexOf("api('saveDraft',{draft:payload})")
-          $iPre=$html.LastIndexOf("cfdiApi('preflight',{draftId:d.id})")
-          $iReady=$html.LastIndexOf("readiness('ensure')")
-          $iConfirm=$html.LastIndexOf("const ok=confirm('Vas a emitir un CFDI REAL")
-          $iTimber=$html.LastIndexOf("issueApi('timber',{draftId:d.id})")
-          $iClear=$html.LastIndexOf('cart=[]')
-          if ($iSave -lt 0 -or $iPre -lt 0 -or $iReady -lt 0 -or $iConfirm -lt 0 -or $iTimber -lt 0 -or $iClear -lt 0) { throw "No se pudo comprobar el flujo FACTURAR" }
-          if (-not ($iSave -lt $iPre -and $iPre -lt $iReady -and $iReady -lt $iConfirm -and $iConfirm -lt $iTimber -and $iTimber -lt $iClear)) { throw "Orden inseguro del flujo FACTURAR" }
 
       - name: Validar firma y updater
         shell: pwsh
@@ -126,7 +118,7 @@ jobs:
         working-directory: desktop
         run: npm run sync-web
 
-      - name: Verificar paquete final y sintaxis
+      - name: Verificar paquete final controladores y orden seguro
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -143,12 +135,24 @@ jobs:
           if(!a) throw new Error('No se encontro FACTURAR v8');
           if(!b) throw new Error('No se encontro panel de timbres');
           if(!c) throw new Error('No se encontro configuracion de correo por negocio');
-          if(!a[1].includes("issueApi('timber',{draftId:d.id})")) throw new Error('FACTURAR no usa cfdi-issue-api');
-          if(!a[1].includes("cfdi-issue-api")) throw new Error('Falta API de emision y entrega');
-          new Function(a[1]);
+          const s=a[1];
+          const tokens=[
+            "api('saveDraft',{draft:payload})",
+            "cfdiApi('preflight',{draftId:d.id})",
+            "readiness('ensure')",
+            "const ok=confirm('Vas a emitir un CFDI REAL",
+            "issueApi('timber',{draftId:d.id})",
+            "cart=[]"
+          ];
+          const pos=tokens.map(x=>s.indexOf(x));
+          if(pos.some(x=>x<0)) throw new Error('Falta una etapa del flujo FACTURAR: '+JSON.stringify(pos));
+          for(let i=1;i<pos.length;i++) if(pos[i]<=pos[i-1]) throw new Error('Orden inseguro en controlador FACTURAR: '+JSON.stringify(pos));
+          if(!s.includes("cfdi-issue-api")) throw new Error('Falta API de emision y entrega');
+          if(s.includes("const r=await cfdiApi('timber',{draftId:d.id});")) throw new Error('El controlador activo todavia usa timbrado sin entrega automatica');
+          new Function(s);
           new Function(b[1]);
           new Function(c[1]);
-          console.log('FACTURAR, Timbres, Correo por negocio y entrega automatica: sintaxis valida');
+          console.log('FACTURAR orden seguro; Timbres; Correo por negocio; entrega automatica: sintaxis valida');
           '@
           node -e $script
           $tauri = Get-Content "desktop/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
@@ -242,4 +246,4 @@ jobs:
           $p=$j.platforms.'windows-x86_64';if(-not $p){throw "Falta plataforma windows-x86_64"}
           if([string]$p.signature.Trim() -ne $sigText){throw "Firma updater no coincide"}
           if([string]$p.url -notmatch "/releases/download/v$([regex]::Escape($env:FR_VERSION))/"){throw "URL updater incorrecta"}
-          Write-Host "v$env:FR_VERSION LISTA: FACTURAR real, gate Finkok, Timbres, Gmail por negocio, entrega automatica, EXE firmado y updater verificados"
+          Write-Host "v$env:FR_VERSION LISTA: FACTURAR real, Finkok, Timbres, Gmail por negocio, entrega automatica, EXE firmado y updater verificados"
