@@ -1,0 +1,79 @@
+name: Factura Rapida - Compare Production to FIX1 Root v0.1.42
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/compare-production-to-fix1-root-v0142.yml'
+
+permissions:
+  contents: read
+
+env:
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+
+jobs:
+  compare:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Probar que index actual es exactamente el usado por FIX1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $old=(git rev-parse '73ff1fa0d4345d492278eef5f2dc836e7ece7695:index.html').Trim()
+          $now=(git hash-object index.html).Trim()
+          Write-Host "FIX1_ROOT_BLOB=$old"
+          Write-Host "CURRENT_ROOT_BLOB=$now"
+          if($old -ne $now){throw 'El index raiz ya no coincide con FIX1'}
+          Copy-Item index.html fix1-root-index.html
+      - name: Descargar UI productiva actual
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile production-current.html -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'}
+          Write-Host "PROD_SHA256=$((Get-FileHash production-current.html -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - name: Diff completo linea por linea
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          git diff --no-index --no-ext-diff --unified=5 -- fix1-root-index.html production-current.html | Out-File production-vs-fix1.diff -Encoding utf8
+          $global:LASTEXITCODE=0
+          $lines=(Get-Content production-vs-fix1.diff).Count
+          Write-Host "DIFF_LINES=$lines"
+      - name: Analizar scripts y bloqueos de parser
+        shell: pwsh
+        run: |
+          Set-Content analyze.mjs @'
+          import fs from 'node:fs';
+          function analyze(path){
+            const html=fs.readFileSync(path,'utf8');
+            const rows=[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].map((m,i)=>({i:i+1,attrs:m[1],code:m[2]}));
+            console.log(`=== ${path} scripts=${rows.length} bytes=${Buffer.byteLength(html)} ===`);
+            for(const r of rows){
+              const id=(r.attrs.match(/\bid=["']([^"']+)/i)||[])[1]||'';
+              const src=(r.attrs.match(/\bsrc=["']([^"']+)/i)||[])[1]||'';
+              const flags=[];
+              for(const [n,re] of [['localStorage',/localStorage\./],['sessionStorage',/sessionStorage\./],['fetch',/\bfetch\s*\(/],['syncXHR',/XMLHttpRequest/],['restoreCall',/\brestore\s*\(\s*\)\s*;?\s*$/m]]) if(re.test(r.code)) flags.push(n);
+              console.log(JSON.stringify({script:r.i,id,src,attrs:r.attrs.trim(),len:r.code.length,flags}));
+            }
+          }
+          analyze('fix1-root-index.html');
+          analyze('production-current.html');
+          '@ -Encoding utf8
+          node analyze.mjs | Tee-Object parser-analysis.txt
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+      - name: Guardar comparacion completa
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-vs-fix1-root-v0142
+          path: |
+            fix1-root-index.html
+            production-current.html
+            production-vs-fix1.diff
+            parser-analysis.txt
+          retention-days: 7
