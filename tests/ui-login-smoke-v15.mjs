@@ -39,6 +39,33 @@ virtualConsole.on('jsdomError', e => jsErrors.push(e));
 virtualConsole.on('error', e => jsErrors.push(e));
 function response(data,status=200){return{ok:status>=200&&status<300,status,async json(){return data},async text(){return JSON.stringify(data)},async blob(){return new Blob([JSON.stringify(data)],{type:'application/json'})}}}
 
+function dumpJsdomFailure(errors){
+  if(!errors.length)return;
+  console.error('===== JSDOM ERROR COMPLETO =====');
+  for(const e of errors){
+    console.error(e);
+    console.error(errText(e));
+  }
+  const joined=errors.map(errText).join('\n');
+  const loc=joined.match(/https:\/\/factura-rapida\.local\/:(\d+)(?::(\d+))?/);
+  if(loc){
+    const line=Number(loc[1]),col=Number(loc[2]||0),lines=base.split(/\r?\n/);
+    console.error(`===== LÍNEA JSDOM ${line}${col?`:${col}`:''} =====`);
+    for(let n=Math.max(1,line-5);n<=Math.min(lines.length,line+5);n++){
+      console.error(`${n===line?'>>>':'   '} ${String(n).padStart(5,' ')} | ${lines[n-1]}`);
+    }
+  }
+  console.error('===== CORE SCRIPT EXACTO BEGIN =====');
+  console.error(coreScript);
+  console.error('===== CORE SCRIPT EXACTO END =====');
+  console.error('===== LOGIN-CLEAN SCRIPT EXACTO BEGIN =====');
+  console.error(cleanMatch[1]);
+  console.error('===== LOGIN-CLEAN SCRIPT EXACTO END =====');
+  console.error('===== HTML MÍNIMO EXACTO BEGIN =====');
+  console.error(base);
+  console.error('===== HTML MÍNIMO EXACTO END =====');
+}
+
 const dom = new JSDOM(base,{url:'https://factura-rapida.local/',runScripts:'dangerously',pretendToBeVisual:true,virtualConsole,beforeParse(window){
   window.confirm=()=>false;window.alert=()=>{};window.scrollTo=()=>{};
   window.fetch=async(url,options={})=>{let payload={};try{payload=JSON.parse(options.body||'{}')}catch{}const action=payload.action,u=String(url);
@@ -52,7 +79,9 @@ const dom = new JSDOM(base,{url:'https://factura-rapida.local/',runScripts:'dang
 }});
 
 const {window}=dom,doc=window.document;await new Promise(r=>setTimeout(r,120));
-const fatalAtBoot=jsErrors.filter(e=>!String(e?.message||e).includes('Not implemented'));assert.equal(fatalAtBoot.length,0,`Errores al iniciar:\n${fatalAtBoot.map(errText).join('\n---\n')}`);
+const fatalAtBoot=jsErrors.filter(e=>!String(e?.message||e).includes('Not implemented'));
+if(fatalAtBoot.length)dumpJsdomFailure(fatalAtBoot);
+assert.equal(fatalAtBoot.length,0,`Errores al iniciar:\n${fatalAtBoot.map(errText).join('\n---\n')}`);
 const auth=doc.getElementById('authLayer'),shell=doc.querySelector('main.shell'),form=doc.getElementById('loginForm');
 assert.ok(auth&&!auth.classList.contains('hidden'),'El login debe iniciar visible');assert.equal(typeof form?.onsubmit,'function','Handler de login requerido');
 
@@ -76,5 +105,7 @@ assert.ok(!shell?.classList.contains('frWorking'),'Interfaz desbloqueada tras lo
 assert.match(doc.getElementById('currentUser')?.textContent||'',/Admin Prueba/,'Sesión simulada debe renderizar usuario');
 const clientesBtn=doc.querySelector('button[data-tab="clientes"]');clientesBtn?.dispatchEvent(new window.MouseEvent('click',{bubbles:true}));await new Promise(r=>setTimeout(r,20));
 assert.ok(!doc.getElementById('tab-clientes')?.classList.contains('hidden'),'Navegación debe responder después del login');
-const fatal=jsErrors.filter(e=>!String(e?.message||e).includes('Not implemented'));assert.equal(fatal.length,0,`Errores JS:\n${fatal.map(errText).join('\n---\n')}`);
+const fatal=jsErrors.filter(e=>!String(e?.message||e).includes('Not implemented'));
+if(fatal.length)dumpJsdomFailure(fatal);
+assert.equal(fatal.length,0,`Errores JS:\n${fatal.map(errText).join('\n---\n')}`);
 console.log('SMOKE V15 OK: body.loading reproducido sin focus, campos escribibles, auth interactiva, doble-submit protegido, sesión y navegación OK.');dom.window.close();
