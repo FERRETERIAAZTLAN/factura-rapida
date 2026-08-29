@@ -170,3 +170,5 @@ jobs:
             desktop/src-tauri/target/release/bundle/nsis/*.exe
             ${{ runner.temp }}/factura-rapida-startup.log
           retention-days: 7
+
+# r2: setup closure ahora recibe app para la sonda nativa
