@@ -13,7 +13,7 @@ permissions:
 
 env:
   FR_VERSION: "0.1.17"
-  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v11"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v12"
 
 jobs:
   publish-windows:
@@ -48,7 +48,7 @@ jobs:
           Expand-Archive -Path $zip.FullName -DestinationPath . -Force
           if (-not (Test-Path "desktop")) { throw "No se creo desktop" }
 
-      - name: Descargar y validar interfaz produccion v11
+      - name: Descargar y validar interfaz produccion v12
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -59,7 +59,7 @@ jobs:
             'data-fr-facturar-real="8"',
             'data-fr-usage-ui="1"',
             'data-fr-business-mail-ui="1"',
-            'data-fr-issue-delivery="1"',
+            'data-fr-issue-delivery="2"',
             "api('saveDraft',{draft:payload})",
             "cfdiApi('preflight',{draftId:d.id})",
             "readiness('ensure')",
@@ -125,7 +125,7 @@ jobs:
           $path = "desktop/dist/index.html"
           if (-not (Test-Path $path)) { throw "Falta desktop/dist/index.html" }
           $html = Get-Content $path -Raw
-          foreach($x in @('data-fr-facturar-real="8"','data-fr-usage-ui="1"','data-fr-business-mail-ui="1"','data-fr-issue-delivery="1"','cfdi-issue-api','business-email-settings-api','gmail-mail-api','Comparar con Finkok')){if(-not $html.Contains($x)){throw "No llego al paquete: $x"}}
+          foreach($x in @('data-fr-facturar-real="8"','data-fr-usage-ui="1"','data-fr-business-mail-ui="1"','data-fr-issue-delivery="2"','cfdi-issue-api','business-email-settings-api','gmail-mail-api','Comparar con Finkok')){if(-not $html.Contains($x)){throw "No llego al paquete: $x"}}
           $script = @'
           const fs=require('fs');
           const h=fs.readFileSync('desktop/dist/index.html','utf8');
