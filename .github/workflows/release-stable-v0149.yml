@@ -1,0 +1,228 @@
+name: Factura Rapida - Release estable v0.1.49
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.release-v0149'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FR_VERSION: "0.1.49"
+  FR_TAG: "v0.1.49"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+  FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
+
+jobs:
+  build-accept-publish:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Backend productivo read-only, sin CFDI
+        shell: pwsh
+        run: |
+          node tests/production-live-smoke.mjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+      - name: Reconstruir desde FIX1 confirmado
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cmd /c "git show $env:FR_FIX1_COMMIT`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1'}
+          $sha=(Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne '144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134'){throw "FIX1 hash inesperado $sha"}
+          Expand-Archive FIX1.zip . -Force
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node scripts/ensure-rust-deps-v0143.mjs desktop/src-tauri/Cargo.toml
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Push-Location desktop
+          npm install --no-audit --no-fund
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node scripts/set-version.mjs "$env:FR_VERSION"
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Pop-Location
+          npm install --no-save --no-audit --no-fund jsdom@25
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+      - name: Construir UI productiva con correcciones aceptadas
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile production-source.html -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'}
+          $env:FR_WEB_SOURCE=(Resolve-Path production-source.html).Path
+          Push-Location desktop
+          npm run sync-web
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Pop-Location
+          node scripts/sanitize-production-ui-v0142.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          New-Item -ItemType Directory -Force desktop/dist/vendor | Out-Null
+          $dest='desktop/dist/vendor/xlsx.full.min.js'
+          Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js' -OutFile $dest -UseBasicParsing
+          if((Get-Item $dest).Length -lt 500000){throw 'XLSX incompleto'}
+          node scripts/vendor-windows-xlsx-lazy-v0144.mjs desktop/dist/index.html $dest
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node scripts/clean-webview-startup-v0148.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node scripts/fix-facturar-mutation-v0148.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node tests/windows-xlsx-lazy-v0144.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node tests/windows-facturar-mutation-v0148.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+      - name: Auditorias productivas exactas
+        shell: pwsh
+        run: |
+          node tests/audit-external-startup-resources.mjs desktop/dist/index.html --require-zero
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node tests/ui-login-smoke-v15.mjs desktop/dist/index.html
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          $env:FR_LOCAL_UI_PATH='desktop/dist/index.html'
+          node tests/production-live-smoke.mjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+      - name: Cargo lock y check
+        shell: pwsh
+        run: |
+          Push-Location desktop/src-tauri
+          cargo generate-lockfile
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          cargo check --locked
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Pop-Location
+
+      - name: Compilar EXE y firma updater
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          if([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)){throw 'Falta signing key'}
+          if([string]::IsNullOrWhiteSpace($env:FR_UPDATER_PUBKEY)){throw 'Falta updater pubkey'}
+          $c=@{app=@{withGlobalTauri=$true};bundle=@{createUpdaterArtifacts=$true};plugins=@{updater=@{pubkey=$env:FR_UPDATER_PUBKEY;endpoints=@('https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json')}}}
+          $c | ConvertTo-Json -Depth 10 | Set-Content desktop/src-tauri/tauri.release.conf.json -Encoding UTF8
+          Push-Location desktop
+          npm run tauri -- build --config src-tauri/tauri.release.conf.json --bundles nsis
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Pop-Location
+
+      - name: Aceptacion EXE real Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $log=Join-Path $env:TEMP 'factura-rapida-startup.log'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          $exe=(Resolve-Path 'desktop/src-tauri/target/release/factura-rapida.exe').Path
+          $p=Start-Process -FilePath $exe -PassThru
+          try{
+            $ok=$false
+            for($i=1;$i -le 60;$i++){
+              Start-Sleep -Seconds 1
+              if($p.HasExited){break}
+              if(Test-Path $log){
+                $txt=Get-Content $log -Raw
+                $base=$txt.Contains("START $env:FR_VERSION") -and $txt.Contains("SETUP_OK $env:FR_VERSION") -and $txt.Contains('PAGE_LOAD Started') -and $txt.Contains('PAGE_LOAD Finished')
+                $dom=$txt.Contains('WEBVIEW_MILESTONE DOM_CONTENT_LOADED')
+                $login=$txt.Contains('WEBVIEW_MILESTONE LOGIN_HIT_FOCUS_OK') -and $txt.Contains('LOGIN_UI_READY ') -and $txt.Contains('"ok":true') -and $txt.Contains('"hitOk":true') -and $txt.Contains('"focusOk":true')
+                if($base -and $dom -and $login){$ok=$true;break}
+              }
+            }
+            $txt=if(Test-Path $log){Get-Content $log -Raw}else{'(sin log)'}
+            Write-Host '=== RELEASE STARTUP LOG ==='
+            Write-Host $txt
+            if(-not $ok){throw 'RELEASE_REAL_EXE_ACCEPTANCE_FAILED'}
+            if($p.HasExited){throw 'RELEASE_EXE_EXITED'}
+          } finally {
+            if(-not $p.HasExited){Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue}
+          }
+
+      - name: Preparar assets y latest.json
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force release | Out-Null
+          $srcExe=(Get-ChildItem 'desktop/src-tauri/target/release/bundle/nsis/*setup.exe' | Select-Object -First 1).FullName
+          $srcSig="$srcExe.sig"
+          if(!(Test-Path $srcExe)){throw 'No se genero EXE NSIS'}
+          if(!(Test-Path $srcSig)){throw 'No se genero firma .sig'}
+          $exeName="Factura.Rapida_$env:FR_VERSION`_x64-setup.exe"
+          Copy-Item $srcExe "release/$exeName"
+          Copy-Item $srcSig "release/$exeName.sig"
+          $sig=(Get-Content "release/$exeName.sig" -Raw).Trim()
+          if([string]::IsNullOrWhiteSpace($sig)){throw 'Firma vacia'}
+          $url="https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/download/$env:FR_TAG/$exeName"
+          $latest=@{
+            version=$env:FR_VERSION
+            notes='Factura Rapida: correccion estable del arranque WebView2 y acceso de login; operacion productiva Finkok.'
+            pub_date=(Get-Date).ToUniversalTime().ToString('o')
+            platforms=@{
+              'windows-x86_64'=@{signature=$sig;url=$url}
+            }
+          }
+          $latest | ConvertTo-Json -Depth 8 | Set-Content release/latest.json -Encoding UTF8
+          $j=Get-Content release/latest.json -Raw | ConvertFrom-Json
+          if($j.version -ne $env:FR_VERSION){throw 'latest.json version incorrecta'}
+          if($j.platforms.'windows-x86_64'.url -notmatch [regex]::Escape("/$env:FR_TAG/$exeName")){throw 'latest.json URL incorrecta'}
+          Get-FileHash "release/$exeName" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLowerInvariant())  $exeName" } | Set-Content release/SHA256SUMS.txt -Encoding ascii
+          Get-FileHash "release/$exeName.sig" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLowerInvariant())  $exeName.sig" } | Add-Content release/SHA256SUMS.txt -Encoding ascii
+          Get-FileHash release/latest.json -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLowerInvariant())  latest.json" } | Add-Content release/SHA256SUMS.txt -Encoding ascii
+          Get-Content release/SHA256SUMS.txt
+
+      - name: Publicar release estable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $existing=(gh release view $env:FR_TAG --json isDraft -q .isDraft 2>$null)
+          if($LASTEXITCODE -eq 0){throw "Ya existe release $env:FR_TAG; no se sobreescribe"}
+          $exeName="Factura.Rapida_$env:FR_VERSION`_x64-setup.exe"
+          gh release create $env:FR_TAG "release/$exeName" "release/$exeName.sig" release/latest.json release/SHA256SUMS.txt --target $env:GITHUB_SHA --title "Factura Rapida $env:FR_VERSION" --notes "Version estable validada en EXE real de Windows. Arranque WebView2, DOM y login interactivo aceptados. Finkok PRODUCCION verificado sin emitir CFDI durante pruebas." --draft
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          $assets=gh release view $env:FR_TAG --json assets -q '.assets[].name'
+          foreach($need in @($exeName,"$exeName.sig",'latest.json','SHA256SUMS.txt')){if($assets -notcontains $need){throw "Falta asset $need"}}
+          $tmp=Join-Path $env:TEMP 'verify-latest.json'
+          gh release download $env:FR_TAG -p latest.json -D (Split-Path $tmp) --clobber
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          Move-Item (Join-Path (Split-Path $tmp) 'latest.json') $tmp -Force
+          $remote=Get-Content $tmp -Raw | ConvertFrom-Json
+          if($remote.version -ne $env:FR_VERSION){throw 'latest.json remoto version incorrecta'}
+          gh release edit $env:FR_TAG --draft=false --prerelease=false --latest
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+      - name: Verificacion final de release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $r=gh release view $env:FR_TAG --json tagName,isDraft,isPrerelease,url,assets | ConvertFrom-Json
+          if($r.tagName -ne $env:FR_TAG){throw 'Tag final incorrecto'}
+          if($r.isDraft){throw 'Release sigue en draft'}
+          if($r.isPrerelease){throw 'Release quedo prerelease'}
+          if($r.assets.Count -lt 4){throw 'Assets incompletos'}
+          Write-Host "RELEASE_ESTABLE_OK $($r.url)"
+
+      - name: Guardar evidencia release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-release-v0149
+          path: |
+            release/*
+            desktop/dist/index.html
+            ${{ runner.temp }}/factura-rapida-startup.log
+          retention-days: 14
