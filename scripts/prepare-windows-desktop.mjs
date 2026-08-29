@@ -32,18 +32,20 @@ for (const marker of ['desktop_info', 'check_for_updates', 'install_update']) {
   if (!rust.includes(marker)) throw new Error(`main.rs: falta comando nativo requerido: ${marker}`);
 }
 
-const uiReadyCommand = `#[tauri::command]\nfn login_ui_ready(report: String) -> Result<(), String> {\n    let safe: String = report.chars().take(4000).collect();\n    let safe = safe.replace('\\n', \" \").replace('\\r', \" \" );\n    write_startup_log(&format!(\"LOGIN_UI_READY {}\", safe));\n    Ok(())\n}\n\n`;
-if (!rust.includes('fn login_ui_ready(')) {
+const runtimeCommands = `#[tauri::command]\nfn webview_milestone(step: String, detail: String) -> Result<(), String> {\n    let safe_step: String = step.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').take(80).collect();\n    if safe_step.is_empty() { return Err(\"step vacío\".into()); }\n    let safe_detail: String = detail.chars().take(2000).collect();\n    let safe_detail = safe_detail.replace('\\n', \" \").replace('\\r', \" \" );\n    write_startup_log(&format!(\"WEBVIEW_MILESTONE {} {}\", safe_step, safe_detail));\n    Ok(())\n}\n\n#[tauri::command]\nfn login_ui_ready(report: String) -> Result<(), String> {\n    let safe: String = report.chars().take(4000).collect();\n    let safe = safe.replace('\\n', \" \").replace('\\r', \" \" );\n    write_startup_log(&format!(\"LOGIN_UI_READY {}\", safe));\n    Ok(())\n}\n\n`;
+if (!rust.includes('fn webview_milestone(') || !rust.includes('fn login_ui_ready(')) {
   const mainNeedle = 'fn main() {';
-  if (!rust.includes(mainNeedle)) throw new Error('main.rs: no se encontró fn main para agregar handshake del login');
-  rust = rust.replace(mainNeedle, uiReadyCommand + mainNeedle);
+  if (!rust.includes(mainNeedle)) throw new Error('main.rs: no se encontró fn main para agregar diagnóstico WebView2');
+  rust = rust.replace(mainNeedle, runtimeCommands + mainNeedle);
 }
 
-if (!rust.includes('login_ui_ready')) throw new Error('main.rs: no se agregó comando login_ui_ready');
-if (!/generate_handler!\[[\s\S]*login_ui_ready[\s\S]*\]/.test(rust)) {
+for (const marker of ['webview_milestone', 'login_ui_ready']) {
+  if (!rust.includes(marker)) throw new Error(`main.rs: no se agregó comando ${marker}`);
+}
+if (!/generate_handler!\[[\s\S]*webview_milestone[\s\S]*login_ui_ready[\s\S]*\]/.test(rust)) {
   const handlerNeedle = `            install_update\n        ])`;
-  const handlerPatch = `            install_update,\n            login_ui_ready\n        ])`;
-  if (!rust.includes(handlerNeedle)) throw new Error('main.rs: no se encontró generate_handler esperado para agregar login_ui_ready');
+  const handlerPatch = `            install_update,\n            webview_milestone,\n            login_ui_ready\n        ])`;
+  if (!rust.includes(handlerNeedle)) throw new Error('main.rs: no se encontró generate_handler esperado para agregar diagnósticos WebView2');
   rust = rust.replace(handlerNeedle, handlerPatch);
 }
 
@@ -62,4 +64,4 @@ mainWindow.dataDirectory = webviewProfile;
 mainWindow.incognito = false;
 await writeFile(tauriPath, JSON.stringify(tauri, null, 2) + '\n', 'utf8');
 
-console.log(`PREPARE WINDOWS DESKTOP OK: perfil WebView2 aislado=${webviewProfile}, puente window.__TAURI__ expuesto, page-load instrumentado y handshake login_ui_ready disponible.`);
+console.log(`PREPARE WINDOWS DESKTOP OK: perfil WebView2 aislado=${webviewProfile}, page-load + webview_milestone + login_ui_ready instrumentados.`);
