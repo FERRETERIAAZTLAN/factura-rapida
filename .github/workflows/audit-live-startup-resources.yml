@@ -1,0 +1,42 @@
+name: Audit Live Startup Resources
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/audit-live-startup-resources.yml'
+
+jobs:
+  audit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download exact production UI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15' -OutFile live.html -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'}
+      - name: List external startup resources
+        shell: pwsh
+        run: node tests/audit-external-startup-resources.mjs live.html
+      - name: Probe every external startup URL
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          $h=Get-Content live.html -Raw
+          $rx=[regex]'(?i)<(?:script|link|img|iframe)\b[^>]*?\b(?:src|href)\s*=\s*["''](https?:\/\/[^"'']+)["'']'
+          $urls=$rx.Matches($h) | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+          foreach($u in $urls){
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            try{
+              $r=Invoke-WebRequest -Uri $u -Method Get -UseBasicParsing -TimeoutSec 15
+              $sw.Stop()
+              Write-Host ("RESOURCE OK {0} {1}ms {2}" -f $r.StatusCode,$sw.ElapsedMilliseconds,$u)
+            } catch {
+              $sw.Stop()
+              Write-Host ("RESOURCE FAIL {0}ms {1} :: {2}" -f $sw.ElapsedMilliseconds,$u,$_.Exception.Message)
+            }
+          }
