@@ -1,0 +1,37 @@
+name: Inspect Desktop Package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-desktop-package.yml'
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expandir desktop base
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip=Get-ChildItem -File -Filter 'Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip' | Select-Object -First 1
+          if(-not $zip){ throw 'No se encontro ZIP base' }
+          Expand-Archive $zip.FullName . -Force
+      - name: Mostrar configuracion efectiva
+        shell: pwsh
+        run: |
+          Write-Host '=== package.json ==='
+          Get-Content desktop/package.json -Raw
+          Write-Host '=== tauri.conf.json ==='
+          Get-Content desktop/src-tauri/tauri.conf.json -Raw
+          Write-Host '=== Cargo.toml ==='
+          Get-Content desktop/src-tauri/Cargo.toml -Raw
+          Write-Host '=== Rust sources ==='
+          Get-ChildItem desktop/src-tauri/src -File -Recurse | ForEach-Object { Write-Host "--- $($_.FullName) ---"; Get-Content $_.FullName -Raw }
+      - name: Buscar rutas, cache, updater y URLs
+        shell: pwsh
+        run: |
+          $patterns='identifier|productName|version|installMode|perMachine|perUser|Webview|cache|localStorage|sessionStorage|updater|endpoint|dist|index.html|factura-desktop|http'
+          Get-ChildItem desktop -File -Recurse | Where-Object { $_.Extension -in '.json','.toml','.rs','.js','.mjs','.html' } | Select-String -Pattern $patterns -CaseSensitive:$false | ForEach-Object { "{0}:{1}: {2}" -f $_.Path,$_.LineNumber,$_.Line.Trim() }
