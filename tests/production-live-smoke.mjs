@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import vm from 'node:vm';
 
 const uiUrl = process.env.FR_PRODUCTION_UI_URL || 'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15';
 const healthUrl = process.env.FR_PRODUCTION_HEALTH_URL || 'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-production-health?business=AZTLAN';
+const localUiPath = process.env.FR_LOCAL_UI_PATH || '';
 
 const forbidden = [
   /demo-facturacion/i,
@@ -45,15 +47,18 @@ const required = [
 async function fetchText(url) {
   const r = await fetch(url, { redirect: 'follow', headers: { 'cache-control': 'no-cache', pragma: 'no-cache' } });
   const text = await r.text();
-  return { r, text };
+  return { status: r.status, text, source: url };
 }
 
-const ui = await fetchText(uiUrl);
-assert.equal(ui.r.status, 200, `UI productiva respondió HTTP ${ui.r.status}: ${ui.text.slice(0,500)}`);
+const ui = localUiPath
+  ? { status: 200, text: fs.readFileSync(localUiPath, 'utf8'), source: localUiPath }
+  : await fetchText(uiUrl);
+
+assert.equal(ui.status, 200, `UI productiva respondió HTTP ${ui.status}: ${ui.text.slice(0,500)}`);
 const html = ui.text;
 
-for (const x of required) assert.ok(html.includes(x), `Falta contrato productivo: ${x}`);
-for (const re of forbidden) assert.ok(!re.test(html), `Contenido no productivo detectado: ${re}`);
+for (const x of required) assert.ok(html.includes(x), `Falta contrato productivo en ${ui.source}: ${x}`);
+for (const re of forbidden) assert.ok(!re.test(html), `Contenido no productivo detectado en ${ui.source}: ${re}`);
 assert.ok(!html.includes("document.body.classList.toggle('loading',v)"), 'Persistió loading global antiguo');
 assert.ok(!html.includes('if(loading)return;busy(true)'), 'Login aún depende de loading global');
 assert.ok(!html.includes('window.frStampDraftDirect=frStampDraftDirect'), 'Persistió ruta fiscal antigua');
@@ -64,11 +69,11 @@ const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/scri
 assert.ok(scripts.length > 0, 'No se encontraron scripts inline en la UI productiva');
 for (let i = 0; i < scripts.length; i++) {
   try {
-    new vm.Script(scripts[i], { filename: `live-inline-${i + 1}.js` });
+    new vm.Script(scripts[i], { filename: `production-inline-${i + 1}.js` });
   } catch (e) {
-    console.error(`SCRIPT INVÁLIDO live-inline-${i + 1}.js`);
+    console.error(`SCRIPT INVÁLIDO production-inline-${i + 1}.js`);
     console.error(e?.stack || e);
-    const line = Number(String(e?.stack || '').match(/live-inline-\d+\.js:(\d+)/)?.[1] || 0);
+    const line = Number(String(e?.stack || '').match(/production-inline-\d+\.js:(\d+)/)?.[1] || 0);
     const lines = scripts[i].split(/\r?\n/);
     if (line) {
       for (let n = Math.max(1, line - 5); n <= Math.min(lines.length, line + 5); n++) {
@@ -113,4 +118,4 @@ assert.equal(data?.productionAuthorized, true, 'Producción no está autorizada'
 assert.equal(data?.finkokReachable, true, 'Finkok PRODUCCIÓN no respondió al probe real');
 assert.equal(data?.ready, true, 'Health integral de producción no está listo');
 
-console.log(`PRODUCTION LIVE OK: UI HTTP 200, ${scripts.length} scripts válidos, flujo fiscal único, Finkok PRODUCCIÓN reachable (${data.finkokServerDatetime || 'hora no reportada'}), CSD/emisor/autorización OK. No se emitió ningún CFDI.`);
+console.log(`PRODUCTION AUDIT OK [${ui.source}]: ${scripts.length} scripts válidos, flujo fiscal único, Finkok PRODUCCIÓN reachable (${data.finkokServerDatetime || 'hora no reportada'}), CSD/emisor/autorización OK. No se emitió ningún CFDI.`);
