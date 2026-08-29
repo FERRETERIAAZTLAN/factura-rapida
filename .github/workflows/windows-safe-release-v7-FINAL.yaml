@@ -28,6 +28,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $ErrorActionPreference = "Stop"
+
           $headers = @{
             Authorization = "Bearer $env:GH_TOKEN"
             Accept = "application/vnd.github+json"
@@ -63,6 +65,8 @@ jobs:
       - name: Preparar Factura Rapida Desktop
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+
           $zip = Get-ChildItem -File -Filter "Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip" | Select-Object -First 1
           if (-not $zip) { throw "No se encontro Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip" }
           Expand-Archive -Path $zip.FullName -DestinationPath . -Force
@@ -71,6 +75,8 @@ jobs:
       - name: Descargar interfaz PRODUCCION limpia
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+
           Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile "index.html" -UseBasicParsing
           $html = Get-Content "index.html" -Raw
 
@@ -105,6 +111,8 @@ jobs:
       - name: Validar configuracion de firma
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw "Falta TAURI_SIGNING_PRIVATE_KEY" }
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) { throw "Falta TAURI_SIGNING_PRIVATE_KEY_PASSWORD" }
           if ([string]::IsNullOrWhiteSpace($env:FR_UPDATER_PUBKEY)) { throw "Falta TAURI_UPDATER_PUBKEY" }
@@ -125,6 +133,8 @@ jobs:
         working-directory: desktop/src-tauri
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+
           cargo add serde_json@1
           if (-not (Select-String -Path "Cargo.toml" -Pattern "serde_json" -Quiet)) { throw "serde_json no quedo agregado a Cargo.toml" }
 
@@ -139,6 +149,8 @@ jobs:
       - name: Verificar exactamente lo que Tauri va a empaquetar
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+
           $path = "desktop/dist/index.html"
           if (-not (Test-Path $path)) { throw "No existe desktop/dist/index.html" }
           $html = Get-Content $path -Raw
@@ -180,6 +192,8 @@ jobs:
       - name: Generar configuracion del actualizador
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+
           $config = @{
             bundle = @{ createUpdaterArtifacts = $true }
             plugins = @{ updater = @{
@@ -266,16 +280,25 @@ jobs:
 
           if (-not $sig) { throw "Falta la firma .exe.sig correspondiente al instalador." }
 
-          # En un Release BORRADOR, GitHub puede devolver browser_download_url
-          # con un identificador temporal "untagged-..." en lugar de v0.1.8.
-          # Por eso construimos la URL PUBLICA FUTURA usando el tag definitivo y
-          # el nombre REAL del asset que GitHub acaba de crear.
-          $encodedExeName = [System.Uri]::EscapeDataString([string]$exe.name).Replace("%2F", "/")
-          $canonicalExeUrl = "https://github.com/$repo/releases/download/$tag/$encodedExeName"
-
           if ([string]::IsNullOrWhiteSpace([string]$exe.name)) {
             throw "El asset .exe no tiene nombre."
           }
+
+          # En un Release BORRADOR, GitHub puede devolver browser_download_url
+          # con un identificador temporal "untagged-..." en lugar de v0.1.8, asi
+          # que NO se usa esa URL tal cual todavia. Pero el NOMBRE del archivo
+          # dentro de esa URL (ultimo segmento) SI viene ya codificado por GitHub
+          # exactamente como GitHub sirve espacios y acentos (p. ej. "Factura
+          # Rápida" con espacios/acentos no se codifica igual que con
+          # EscapeDataString a mano). Se reutiliza ese segmento tal cual en vez
+          # de reconstruirlo manualmente, y se le antepone el tag definitivo.
+          $exeBrowserUri = $null
+          if (-not [System.Uri]::TryCreate([string]$exe.browser_download_url, [System.UriKind]::Absolute, [ref]$exeBrowserUri)) {
+            throw "El asset .exe no tiene un browser_download_url valido: >>>$($exe.browser_download_url)<<<"
+          }
+          $exeEncodedSegment = $exeBrowserUri.Segments[-1]
+          $canonicalExeUrl = "https://github.com/$repo/releases/download/$tag/$exeEncodedSegment"
+
           if ($canonicalExeUrl -notmatch [regex]::Escape($expectedTagPath)) {
             throw "No se pudo construir la URL publica futura para el tag $tag."
           }
@@ -363,12 +386,36 @@ jobs:
               -Headers $headers
           }
 
-          $uploadBase = [string]$release.upload_url
-          if ([string]::IsNullOrWhiteSpace($uploadBase)) {
+          $uploadBaseRaw = [string]$release.upload_url
+          if ([string]::IsNullOrWhiteSpace($uploadBaseRaw)) {
             throw "GitHub no devolvio upload_url para el borrador."
           }
-          $uploadBase = $uploadBase -replace '\{\?name,label\}$',''
-          $uploadUri = "$uploadBase?name=$([System.Uri]::EscapeDataString($tempAssetName))"
+
+          # Diagnostico: los delimitadores >>><<< hacen visibles espacios o
+          # saltos de linea invisibles si el valor viniera corrupto.
+          Write-Host "DEBUG upload_url crudo: >>>$uploadBaseRaw<<<"
+
+          # upload_url llega como plantilla RFC 6570, por ejemplo:
+          #   https://uploads.github.com/repos/OWNER/REPO/releases/123/assets{?name,label}
+          # Se recorta todo desde el primer '{' (sin regex, para evitar
+          # ambiguedades de escape) y se valida explicitamente el resultado
+          # como URI absoluta antes de usarla.
+          $braceIndex = $uploadBaseRaw.IndexOf('{')
+          $uploadBase = if ($braceIndex -ge 0) { $uploadBaseRaw.Substring(0, $braceIndex) } else { $uploadBaseRaw }
+          $uploadBase = $uploadBase.Trim()
+
+          $parsedUploadBase = $null
+          if (-not [System.Uri]::TryCreate($uploadBase, [System.UriKind]::Absolute, [ref]$parsedUploadBase)) {
+            throw "upload_url del borrador no es una URI absoluta valida tras limpiarla. Crudo: >>>$uploadBaseRaw<<< Limpio: >>>$uploadBase<<<"
+          }
+
+          # Se usa UriBuilder (no concatenacion manual con '?name=') para
+          # anexar el query string de forma robusta y sin ambiguedad.
+          $uploadUriBuilder = [System.UriBuilder]::new($parsedUploadBase)
+          $uploadUriBuilder.Query = "name=$([System.Uri]::EscapeDataString($tempAssetName))"
+          $uploadUri = $uploadUriBuilder.Uri.AbsoluteUri
+
+          Write-Host "DEBUG uploadUri final: $uploadUri"
 
           $tempUploaded = Invoke-RestMethod `
             -Method Post `
