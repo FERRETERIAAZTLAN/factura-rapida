@@ -1,0 +1,139 @@
+name: Factura Rapida - Release v0.1.9
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/windows-release-v019.yml'
+      - 'release-v019'
+
+permissions:
+  contents: write
+
+env:
+  FR_VERSION: "0.1.9"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui"
+
+jobs:
+  publish-windows:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Preparar base Desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zip = Get-ChildItem -File -Filter "Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip" | Select-Object -First 1
+          if (-not $zip) { throw "No se encontro ZIP base" }
+          Expand-Archive -Path $zip.FullName -DestinationPath . -Force
+          if (-not (Test-Path "desktop")) { throw "No se creo desktop" }
+
+      - name: Descargar y validar interfaz PRODUCCION
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile "index.html" -UseBasicParsing
+          $html = Get-Content "index.html" -Raw
+          if ($html -notmatch 'data-fr-production-clean="1"') { throw "Falta marcador PRODUCCION" }
+          if ($html -notmatch 'data-fr-facturar-real="1"') { throw "FACTURAR no esta conectado al timbrado real" }
+          if ($html -notmatch '>FACTURAR<') { throw "Falta boton FACTURAR" }
+          $forbidden = @('id="pacForm"','id="sandboxCsdForm"','id="finkokSmokeBtn"','id="finkokCancelBtn"','id="finkokCancelCheckBtn"','>Finkok · DEMO<','Producción está bloqueada.','Timbrar CFDI · Falta conectar PAC')
+          foreach ($bad in $forbidden) { if ($html.Contains($bad)) { throw "Contenido DEMO prohibido: $bad" } }
+
+      - name: Validar firma
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw "Falta TAURI_SIGNING_PRIVATE_KEY" }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) { throw "Falta TAURI_SIGNING_PRIVATE_KEY_PASSWORD" }
+          if ([string]::IsNullOrWhiteSpace($env:FR_UPDATER_PUBKEY)) { throw "Falta TAURI_UPDATER_PUBKEY" }
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependencias
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Asegurar serde_json
+        working-directory: desktop/src-tauri
+        shell: pwsh
+        run: |
+          if (-not (Select-String -Path "Cargo.toml" -Pattern "serde_json" -Quiet)) { cargo add serde_json@1 }
+
+      - name: Establecer version
+        working-directory: desktop
+        run: node scripts/set-version.mjs "${{ env.FR_VERSION }}"
+
+      - name: Sincronizar interfaz
+        working-directory: desktop
+        run: npm run sync-web
+
+      - name: Verificar paquete final
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $path = "desktop/dist/index.html"
+          if (-not (Test-Path $path)) { throw "Falta desktop/dist/index.html" }
+          $html = Get-Content $path -Raw
+          if ($html -notmatch 'data-fr-production-clean="1"') { throw "HTML final no es PRODUCCION" }
+          if ($html -notmatch 'data-fr-facturar-real="1"') { throw "HTML final no tiene FACTURAR real" }
+          if ($html -notmatch '>FACTURAR<') { throw "HTML final no contiene FACTURAR" }
+          $tauri = Get-Content "desktop/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
+          if ([string]$tauri.build.frontendDist -ne "../dist") { throw "Tauri no apunta a ../dist" }
+
+      - name: Configurar actualizador
+        shell: pwsh
+        run: |
+          $config = @{
+            bundle = @{ createUpdaterArtifacts = $true }
+            plugins = @{ updater = @{
+              pubkey = $env:FR_UPDATER_PUBKEY
+              endpoints = @("https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json")
+            }}
+          }
+          $config | ConvertTo-Json -Depth 10 | Set-Content "desktop/src-tauri/tauri.release.conf.json" -Encoding UTF8
+
+      - name: Compilar, firmar y publicar v0.1.9
+        uses: tauri-apps/tauri-action@action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          tagName: "v__VERSION__"
+          releaseName: "Factura Rapida v__VERSION__"
+          releaseBody: "Correccion productiva: boton FACTURAR conectado a Finkok PRODUCCION y eliminacion de controles DEMO."
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterSignatures: true
+          args: "--config src-tauri/tauri.release.conf.json --bundles nsis"
+
+      - name: Verificar release publica
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json"; "X-GitHub-Api-Version" = "2022-11-28" }
+          $r = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/v$env:FR_VERSION" -Headers $headers
+          if ($r.draft -eq $true) { throw "Release quedo en borrador" }
+          if (-not ($r.assets | Where-Object { $_.name -match '\.exe$' })) { throw "Falta instalador EXE" }
+          if (-not ($r.assets | Where-Object { $_.name -eq 'latest.json' })) { throw "Falta latest.json" }
+          Write-Host "v$env:FR_VERSION publicada correctamente"
