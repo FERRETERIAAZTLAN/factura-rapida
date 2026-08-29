@@ -1,0 +1,29 @@
+name: Strict Login V15
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/strict-login-v15.yml'
+
+jobs:
+  strict-login:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Preparar HTML productivo exacto
+        run: |
+          mkdir -p desktop/dist
+          curl -fsSL -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+            'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15' \
+            -o desktop/dist/index.html
+          test -s desktop/dist/index.html
+      - name: Instalar JSDOM 25
+        run: npm install --no-save --no-package-lock jsdom@25
+      - name: Smoke estricto V15
+        run: node tests/ui-login-smoke-v15.mjs desktop/dist/index.html
