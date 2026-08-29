@@ -1,0 +1,177 @@
+name: Factura Rapida - Release v0.1.25
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/windows-release-v0125.yml'
+      - 'tests/production-live-smoke.mjs'
+      - 'release-v0125'
+
+permissions:
+  contents: write
+
+env:
+  FR_VERSION: "0.1.25"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+  FR_PRODUCTION_HEALTH_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-production-health?business=AZTLAN"
+
+jobs:
+  publish-windows:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar version nueva
+        shell: pwsh
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag="v$env:FR_VERSION"
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if($LASTEXITCODE -eq 0){throw "$tag ya existe"}
+          $global:LASTEXITCODE=0
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - name: Verificacion LIVE exclusiva de produccion
+        shell: pwsh
+        run: node tests/production-live-smoke.mjs
+
+      - name: Preparar Desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip=Get-ChildItem -File -Filter 'Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip'|Select-Object -First 1
+          if(-not $zip){throw 'No se encontro ZIP base'}
+          Expand-Archive $zip.FullName . -Force
+          if(-not(Test-Path desktop)){throw 'No se creo desktop'}
+
+      - name: Descargar UI productiva y validar contratos
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile index.html -UseBasicParsing
+          $h=Get-Content index.html -Raw
+          foreach($x in @(
+            'data-fr-production-clean="1"','data-fr-facturar-real="8"','data-fr-usage-ui="1"','data-fr-business-mail-ui="1"','data-fr-issue-delivery="2"','data-fr-login-clean="1"',
+            "window.__frLoginUiVersion='15-clean2'",'loading&&!authVisible','body.loading{pointer-events:auto!important}','if(window.__frLoginPending)return',
+            "api('saveDraft',{draft:payload})","cfdiApi('preflight',{draftId:d.id})","readiness('ensure')","issueApi('timber',{draftId:d.id})",
+            'finkok-production-readiness-api','cfdi-issue-api','cfdi-usage-api','business-email-settings-api','gmail-mail-api','Uso de timbres','Correo y datos del negocio'
+          )){if(-not $h.Contains($x)){throw "Falta contrato: $x"}}
+          foreach($x in @('demo-facturacion','Finkok DEMO','sandbox','stampSmokeTest','cancelSmokeTest','checkCancelSmokeTest','uploadSandbox','EKU9003173C9','ESCUELA KEMPER URGATE','mock','simulado','simulada',"document.body.classList.toggle('loading',v)",'if(loading)return;busy(true)','window.frStampDraftDirect=frStampDraftDirect','function addRealStampButtons()',"cfdiApi('timber',{draftId:d.id})")){if($h.IndexOf($x,[StringComparison]::OrdinalIgnoreCase)-ge 0){throw "Contenido no productivo: $x"}}
+
+      - name: Validar firma y updater
+        shell: pwsh
+        run: |
+          if([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)){throw 'Falta TAURI_SIGNING_PRIVATE_KEY'}
+          if([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)){throw 'Falta TAURI_SIGNING_PRIVATE_KEY_PASSWORD'}
+          if([string]::IsNullOrWhiteSpace($env:FR_UPDATER_PUBKEY)){throw 'Falta TAURI_UPDATER_PUBKEY'}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependencias Desktop
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Asegurar serde_json
+        working-directory: desktop/src-tauri
+        shell: pwsh
+        run: if(-not(Select-String -Path Cargo.toml -Pattern serde_json -Quiet)){cargo add serde_json@1}
+
+      - name: Establecer version
+        working-directory: desktop
+        run: node scripts/set-version.mjs "${{ env.FR_VERSION }}"
+
+      - name: Sincronizar interfaz
+        working-directory: desktop
+        run: npm run sync-web
+
+      - name: Verificar paquete final y orden fiscal seguro
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $h=Get-Content desktop/dist/index.html -Raw
+          foreach($x in @('data-fr-facturar-real="8"','data-fr-usage-ui="1"','data-fr-business-mail-ui="1"','data-fr-issue-delivery="2"','data-fr-login-clean="1"',"window.__frLoginUiVersion='15-clean2'",'loading&&!authVisible','finkok-production-readiness-api','cfdi-issue-api','business-email-settings-api','gmail-mail-api')){if(-not $h.Contains($x)){throw "No llego al paquete: $x"}}
+          foreach($x in @('demo-facturacion','Finkok DEMO','sandbox','stampSmokeTest','cancelSmokeTest','checkCancelSmokeTest','uploadSandbox','EKU9003173C9','ESCUELA KEMPER URGATE','mock','simulado','simulada',"document.body.classList.toggle('loading',v)",'if(loading)return;busy(true)','window.frStampDraftDirect=frStampDraftDirect','function addRealStampButtons()',"cfdiApi('timber',{draftId:d.id})")){if($h.IndexOf($x,[StringComparison]::OrdinalIgnoreCase)-ge 0){throw "Paquete contiene contenido no productivo: $x"}}
+          $s=@'
+          const fs=require('fs'),vm=require('vm'),h=fs.readFileSync('desktop/dist/index.html','utf8');
+          const scripts=[...h.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
+          if(!scripts.length)throw Error('No hay scripts'); scripts.forEach((s,i)=>new vm.Script(s,{filename:`bundle-inline-${i+1}.js`}));
+          const a=h.match(/<script data-fr-facturar-real="8">([\s\S]*?)<\/script>/); if(!a)throw Error('Falta FACTURAR');
+          const x=a[1],t=["api('saveDraft',{draft:payload})","cfdiApi('preflight',{draftId:d.id})","readiness('ensure')","const ok=confirm('Vas a emitir un CFDI REAL","issueApi('timber',{draftId:d.id})","cart=[]"],p=t.map(y=>x.indexOf(y));
+          if(p.some(y=>y<0))throw Error('Falta etapa '+JSON.stringify(p)); for(let i=1;i<p.length;i++)if(p[i]<=p[i-1])throw Error('Orden inseguro '+JSON.stringify(p)); console.log(`PAQUETE OK: ${scripts.length} scripts, flujo fiscal unico y orden seguro`)
+          '@
+          node -e $s
+          $t=Get-Content desktop/src-tauri/tauri.conf.json -Raw|ConvertFrom-Json
+          if([string]$t.build.frontendDist -ne '../dist'){throw 'Tauri no apunta a ../dist'}
+
+      - name: Configurar actualizador
+        shell: pwsh
+        run: |
+          $c=@{bundle=@{createUpdaterArtifacts=$true};plugins=@{updater=@{pubkey=$env:FR_UPDATER_PUBKEY;endpoints=@('https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json')}}}
+          $c|ConvertTo-Json -Depth 10|Set-Content desktop/src-tauri/tauri.release.conf.json -Encoding UTF8
+
+      - name: Compilar firmar y publicar
+        uses: tauri-apps/tauri-action@action-v1.0.0
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          TAURI_SIGNING_PRIVATE_KEY: "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
+        with:
+          projectPath: desktop
+          tagName: v__VERSION__
+          releaseName: Factura Rapida v__VERSION__
+          releaseBody: Produccion exclusiva. Smoke LIVE contra UI y Finkok PRODUCCION. Flujo fiscal unico por cfdi-issue-api, con preflight, confirmacion explicita, proteccion de folio, Timbres, Gmail y PDF/XML.
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterSignatures: true
+          args: --config src-tauri/tauri.release.conf.json --bundles nsis
+
+      - name: Reconstruir latest.json desde activos publicados
+        shell: pwsh
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: |
+          $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
+          $a=gh release view $tag --repo $repo --json assets|ConvertFrom-Json
+          $exe=$a.assets|?{$_.name-match'\.exe$'}|select -First 1
+          $sig=$a.assets|?{$_.name-match'\.exe\.sig$'}|select -First 1
+          if(-not$exe-or-not$sig){throw 'Faltan EXE o firma'}
+          mkdir release-files -Force|Out-Null
+          gh release download $tag --repo $repo --pattern '*.exe.sig' --dir release-files --clobber
+          $sf=Get-ChildItem release-files -Filter '*.exe.sig'|select -First 1
+          $st=(Get-Content $sf.FullName -Raw).Trim()
+          $url="https://github.com/$repo/releases/download/$tag/$([uri]::EscapeDataString($exe.name))"
+          $j=[ordered]@{version=$env:FR_VERSION;notes="Factura Rapida $env:FR_VERSION";pub_date=[DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ');platforms=[ordered]@{'windows-x86_64'=[ordered]@{signature=$st;url=$url}}}
+          $j|ConvertTo-Json -Depth 8|Set-Content latest.json -Encoding UTF8
+          gh release upload $tag latest.json --clobber --repo $repo
+
+      - name: Verificacion final release updater
+        shell: pwsh
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: |
+          $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
+          $r=gh release view $tag --repo $repo --json isDraft,isPrerelease,assets,tagName|ConvertFrom-Json
+          if($r.tagName-ne$tag-or$r.isDraft-or$r.isPrerelease){throw 'Release no estable'}
+          $exe=$r.assets|?{$_.name-match'\.exe$'}|select -First 1
+          $sig=$r.assets|?{$_.name-match'\.exe\.sig$'}|select -First 1
+          $lat=$r.assets|?{$_.name-eq'latest.json'}|select -First 1
+          if(-not$exe-or-not$sig-or-not$lat){throw 'Release incompleta'}
+          mkdir verify-files -Force|Out-Null
+          gh release download $tag --repo $repo --pattern latest.json --dir verify-files --clobber
+          gh release download $tag --repo $repo --pattern '*.exe.sig' --dir verify-files --clobber
+          $j=Get-Content verify-files/latest.json -Raw|ConvertFrom-Json
+          $sf=Get-ChildItem verify-files -Filter '*.exe.sig'|select -First 1
+          $st=(Get-Content $sf.FullName -Raw).Trim()
+          $p=$j.platforms.'windows-x86_64'
+          if([string]$j.version-ne$env:FR_VERSION-or-not$p-or[string]$p.signature.Trim()-ne$st){throw 'latest.json o firma no coinciden'}
+          Write-Host 'VERIFICACION FINAL OK'
