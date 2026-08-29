@@ -6,6 +6,8 @@ const desktop = resolve(root, 'desktop');
 const syncPath = resolve(desktop, 'scripts', 'sync-web.mjs');
 const rustPath = resolve(desktop, 'src-tauri', 'src', 'main.rs');
 const tauriPath = resolve(desktop, 'src-tauri', 'tauri.conf.json');
+const webviewProfile = String(process.env.FR_WEBVIEW_PROFILE || 'webview-profile-v2').trim();
+if (!/^[a-zA-Z0-9._-]+$/.test(webviewProfile)) throw new Error('FR_WEBVIEW_PROFILE inválido');
 
 let sync = await readFile(syncPath, 'utf8');
 const oldSource = 'const source = resolve(repo, "index.html");';
@@ -29,11 +31,20 @@ for (const [from, to] of replacements) {
 for (const marker of ['desktop_info', 'check_for_updates', 'install_update']) {
   if (!rust.includes(marker)) throw new Error(`main.rs: falta comando nativo requerido: ${marker}`);
 }
+
+const setupNeedle = `    tauri::Builder::default()\n        .setup(|_| {`;
+const pageLoadPatch = `    tauri::Builder::default()\n        .on_page_load(|_, payload| {\n            write_startup_log(&format!(\"PAGE_LOAD {:?} {}\", payload.event(), payload.url()));\n        })\n        .setup(|_| {`;
+if (rust.includes(setupNeedle)) rust = rust.replace(setupNeedle, pageLoadPatch);
+else if (!rust.includes('PAGE_LOAD {:?} {}')) throw new Error('main.rs: no se pudo agregar diagnóstico nativo de carga WebView2');
 await writeFile(rustPath, rust, 'utf8');
 
 const tauri = JSON.parse(await readFile(tauriPath, 'utf8'));
 tauri.app ??= {};
 tauri.app.withGlobalTauri = true;
+if (!Array.isArray(tauri.app.windows) || !tauri.app.windows.length) throw new Error('tauri.conf.json: falta ventana principal');
+const mainWindow = tauri.app.windows.find(w => w?.label === 'main') || tauri.app.windows[0];
+mainWindow.dataDirectory = webviewProfile;
+mainWindow.incognito = false;
 await writeFile(tauriPath, JSON.stringify(tauri, null, 2) + '\n', 'utf8');
 
-console.log('PREPARE WINDOWS DESKTOP OK: sync-web usa FR_WEB_SOURCE, Rust reporta CARGO_PKG_VERSION y Tauri expone window.__TAURI__.');
+console.log(`PREPARE WINDOWS DESKTOP OK: perfil WebView2 aislado=${webviewProfile}, puente window.__TAURI__ expuesto y page-load nativo instrumentado.`);
