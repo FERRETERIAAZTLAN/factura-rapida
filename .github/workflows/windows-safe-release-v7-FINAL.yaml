@@ -1,0 +1,550 @@
+name: Factura Rapida - Publicar actualizacion segura V7
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FR_VERSION: "0.1.8"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui"
+
+jobs:
+  publish-windows:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Verificar version y limpiar borradores viejos
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $tag = "v$env:FR_VERSION"
+          $releases = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/${{ github.repository }}/releases?per_page=100" `
+            -Headers $headers
+          $existing = $releases | Where-Object { $_.tag_name -eq $tag } | Select-Object -First 1
+
+          if ($existing -and $existing.draft -ne $true) {
+            throw "Ya existe una release publicada con tag $tag. No se sobrescribira."
+          }
+
+          if ($existing -and $existing.draft -eq $true) {
+            Write-Host "Se encontro un borrador viejo de $tag (id=$($existing.id)). Se elimina para compilar desde cero y evitar assets inconsistentes."
+            Invoke-RestMethod -Method Delete `
+              -Uri "https://api.github.com/repos/${{ github.repository }}/releases/$($existing.id)" `
+              -Headers $headers
+
+            # El tag anotado puede quedar huerfano tras borrar la release; se elimina tambien si existe.
+            try {
+              Invoke-RestMethod -Method Delete `
+                -Uri "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/$tag" `
+                -Headers $headers
+              Write-Host "Tag $tag eliminado."
+            } catch {
+              Write-Host "No se encontro tag $tag como ref, o ya no existia. Se continua."
+            }
+          }
+
+      - name: Preparar Factura Rapida Desktop
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -File -Filter "Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip" | Select-Object -First 1
+          if (-not $zip) { throw "No se encontro Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip" }
+          Expand-Archive -Path $zip.FullName -DestinationPath . -Force
+          if (-not (Test-Path "desktop")) { throw "El ZIP base no creo la carpeta desktop." }
+
+      - name: Descargar interfaz PRODUCCION limpia
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile "index.html" -UseBasicParsing
+          $html = Get-Content "index.html" -Raw
+
+          if ($html -notmatch 'data-fr-production-clean="1"') {
+            throw "Falta el marcador obligatorio de PRODUCCION limpia."
+          }
+          if ($html -notmatch 'Finkok · PRODUCCI') {
+            throw "La interfaz no contiene Finkok PRODUCCION."
+          }
+          if ($html -notmatch '>FACTURAR<') {
+            throw "La interfaz no contiene el boton FACTURAR."
+          }
+
+          $forbidden = @(
+            'id="pacForm"',
+            'id="sandboxCsdForm"',
+            'id="finkokSmokeBtn"',
+            'id="finkokCancelBtn"',
+            'id="finkokCancelCheckBtn"',
+            '>Finkok · DEMO<',
+            'Producción está bloqueada.',
+            'Timbrar CFDI · Falta conectar PAC'
+          )
+          foreach ($bad in $forbidden) {
+            if ($html.Contains($bad)) {
+              throw "Se encontro contenido prohibido de DEMO: $bad"
+            }
+          }
+
+          Write-Host "Interfaz productiva limpia validada antes de compilar."
+
+      - name: Validar configuracion de firma
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw "Falta TAURI_SIGNING_PRIVATE_KEY" }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) { throw "Falta TAURI_SIGNING_PRIVATE_KEY_PASSWORD" }
+          if ([string]::IsNullOrWhiteSpace($env:FR_UPDATER_PUBKEY)) { throw "Falta TAURI_UPDATER_PUBKEY" }
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Preparar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependencias JavaScript
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Agregar dependencia serde_json
+        working-directory: desktop/src-tauri
+        shell: pwsh
+        run: |
+          cargo add serde_json@1
+          if (-not (Select-String -Path "Cargo.toml" -Pattern "serde_json" -Quiet)) { throw "serde_json no quedo agregado a Cargo.toml" }
+
+      - name: Establecer version 0.1.8
+        working-directory: desktop
+        run: node scripts/set-version.mjs "${{ env.FR_VERSION }}"
+
+      - name: Sincronizar pagina web
+        working-directory: desktop
+        run: npm run sync-web
+
+      - name: Verificar exactamente lo que Tauri va a empaquetar
+        shell: pwsh
+        run: |
+          $path = "desktop/dist/index.html"
+          if (-not (Test-Path $path)) { throw "No existe desktop/dist/index.html" }
+          $html = Get-Content $path -Raw
+
+          if ($html -notmatch 'data-fr-production-clean="1"') { throw "El HTML final perdio el marcador de PRODUCCION limpia." }
+          if ($html -notmatch '>FACTURAR<') { throw "El HTML final no contiene FACTURAR." }
+
+          $forbidden = @(
+            'id="pacForm"',
+            'id="sandboxCsdForm"',
+            'id="finkokSmokeBtn"',
+            'id="finkokCancelBtn"',
+            'id="finkokCancelCheckBtn"',
+            '>Finkok · DEMO<',
+            'Producción está bloqueada.',
+            'Timbrar CFDI · Falta conectar PAC'
+          )
+          foreach ($bad in $forbidden) {
+            if ($html.Contains($bad)) { throw "El HTML final contiene contenido prohibido: $bad" }
+          }
+
+          $tauriPath = "desktop/src-tauri/tauri.conf.json"
+          if (-not (Test-Path $tauriPath)) { throw "No existe desktop/src-tauri/tauri.conf.json" }
+
+          $tauri = Get-Content $tauriPath -Raw | ConvertFrom-Json
+          $frontendDist = [string]$tauri.build.frontendDist
+
+          if ([string]::IsNullOrWhiteSpace($frontendDist)) {
+            throw "tauri.conf.json no define build.frontendDist; se cancela."
+          }
+
+          $normalizedFrontendDist = $frontendDist.Replace("\\", "/").TrimEnd("/")
+          if ($normalizedFrontendDist -ne "../dist") {
+            throw "Tauri apunta a '$frontendDist' y no a ../dist; se cancela para evitar empaquetar otra interfaz."
+          }
+
+          Write-Host "desktop/dist/index.html es PRODUCCION limpia, contiene FACTURAR y Tauri build.frontendDist apunta a ../dist."
+
+      - name: Generar configuracion del actualizador
+        shell: pwsh
+        run: |
+          $config = @{
+            bundle = @{ createUpdaterArtifacts = $true }
+            plugins = @{ updater = @{
+              pubkey = $env:FR_UPDATER_PUBKEY
+              endpoints = @("https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json")
+            }}
+          }
+          $json = $config | ConvertTo-Json -Depth 10
+          Set-Content -Path "desktop/src-tauri/tauri.release.conf.json" -Value $json -Encoding UTF8
+
+      - name: Compilar y firmar en Release BORRADOR
+        uses: tauri-apps/tauri-action@action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+        with:
+          projectPath: desktop
+          tagName: "v__VERSION__"
+          releaseName: "Factura Rapida v__VERSION__"
+          releaseBody: "Produccion limpia: Finkok PRODUCCION, boton FACTURAR y eliminacion fisica de controles DEMO."
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterSignatures: true
+          args: "--config src-tauri/tauri.release.conf.json --bundles nsis"
+
+      - name: Corregir y verificar latest.json del borrador
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+
+          $assetHeaders = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/octet-stream"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+
+          $tag = "v$env:FR_VERSION"
+          $repo = "${{ github.repository }}"
+          $expectedTagPath = "/releases/download/$tag/"
+          $tempAssetName = "latest.$env:FR_VERSION.corrected.json"
+
+          $releases = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/$repo/releases?per_page=100" `
+            -Headers $headers
+
+          $release = $releases | Where-Object { $_.tag_name -eq $tag } | Select-Object -First 1
+
+          if (-not $release) { throw "No se encontro el Release borrador $tag." }
+          if ($release.draft -ne $true) { throw "La release no esta en borrador; se cancela." }
+
+          $exe = $release.assets | Where-Object { $_.name -match '\.exe$' } | Select-Object -First 1
+          $latest = $release.assets | Where-Object { $_.name -eq 'latest.json' } | Select-Object -First 1
+          $staleTemp = $release.assets | Where-Object { $_.name -eq $tempAssetName } | Select-Object -First 1
+
+          if (-not $exe) { throw "Falta el instalador .exe." }
+          if (-not $latest) { throw "Falta latest.json." }
+
+          $exeDisplayName = if (-not [string]::IsNullOrWhiteSpace([string]$exe.label)) {
+            [string]$exe.label
+          } else {
+            [string]$exe.name
+          }
+
+          $sig = $release.assets | Where-Object {
+            ($_.name -eq "$($exe.name).sig") -or
+            ($_.label -eq "$exeDisplayName.sig")
+          } | Select-Object -First 1
+
+          if (-not $sig) {
+            $sig = $release.assets | Where-Object { $_.name -match '\.exe\.sig$' } | Select-Object -First 1
+          }
+
+          if (-not $sig) { throw "Falta la firma .exe.sig correspondiente al instalador." }
+
+          # En un Release BORRADOR, GitHub puede devolver browser_download_url
+          # con un identificador temporal "untagged-..." en lugar de v0.1.8.
+          # Por eso construimos la URL PUBLICA FUTURA usando el tag definitivo y
+          # el nombre REAL del asset que GitHub acaba de crear.
+          $encodedExeName = [System.Uri]::EscapeDataString([string]$exe.name).Replace("%2F", "/")
+          $canonicalExeUrl = "https://github.com/$repo/releases/download/$tag/$encodedExeName"
+
+          if ([string]::IsNullOrWhiteSpace([string]$exe.name)) {
+            throw "El asset .exe no tiene nombre."
+          }
+          if ($canonicalExeUrl -notmatch [regex]::Escape($expectedTagPath)) {
+            throw "No se pudo construir la URL publica futura para el tag $tag."
+          }
+
+          Invoke-WebRequest `
+            -Uri $latest.url `
+            -OutFile "latest.original.json" `
+            -Headers $assetHeaders `
+            -UseBasicParsing
+
+          Invoke-WebRequest `
+            -Uri $sig.url `
+            -OutFile "installer.verify.sig" `
+            -Headers $assetHeaders `
+            -UseBasicParsing
+
+          $rawOriginal = Get-Content "latest.original.json" -Raw
+          $j = $rawOriginal | ConvertFrom-Json
+          $sigText = (Get-Content "installer.verify.sig" -Raw).Trim()
+
+          if ([string]$j.version -ne $env:FR_VERSION) {
+            throw "latest.json anuncia $($j.version), no $env:FR_VERSION."
+          }
+          if (-not $j.platforms) {
+            throw "latest.json no contiene platforms."
+          }
+          if ([string]::IsNullOrWhiteSpace($sigText)) {
+            throw "La firma .exe.sig esta vacia."
+          }
+
+          $matchedWindows = 0
+          foreach ($property in $j.platforms.PSObject.Properties) {
+            if ($property.Name -like 'windows-*') {
+              $entry = $property.Value
+              if ($entry -and
+                  -not [string]::IsNullOrWhiteSpace([string]$entry.signature) -and
+                  ([string]$entry.signature).Trim() -eq $sigText) {
+                $entry.url = $canonicalExeUrl
+                $matchedWindows++
+              }
+            }
+          }
+
+          if ($matchedWindows -lt 1) {
+            throw "Ninguna entrada Windows de latest.json coincide con la firma .exe.sig del instalador."
+          }
+
+          $correctedRaw = $j | ConvertTo-Json -Depth 30
+          [System.IO.File]::WriteAllText(
+            (Join-Path $PWD "latest.corrected.json"),
+            $correctedRaw,
+            [System.Text.UTF8Encoding]::new($false)
+          )
+
+          $localRaw = Get-Content "latest.corrected.json" -Raw
+          $localJson = $localRaw | ConvertFrom-Json
+
+          if ([string]$localJson.version -ne $env:FR_VERSION) {
+            throw "El latest.json corregido perdio la version correcta."
+          }
+
+          $validWindows = 0
+          foreach ($property in $localJson.platforms.PSObject.Properties) {
+            if ($property.Name -like 'windows-*') {
+              $entry = $property.Value
+              if ($entry -and
+                  ([string]$entry.url -eq $canonicalExeUrl) -and
+                  (([string]$entry.signature).Trim() -eq $sigText)) {
+                $validWindows++
+              }
+            }
+          }
+
+          if ($validWindows -lt 1) {
+            throw "El latest.json corregido no contiene una entrada Windows valida."
+          }
+          if ($localRaw -notmatch [regex]::Escape($expectedTagPath)) {
+            throw "El latest.json corregido no apunta al tag $tag."
+          }
+
+          if ($staleTemp) {
+            Invoke-RestMethod `
+              -Method Delete `
+              -Uri "https://api.github.com/repos/$repo/releases/assets/$($staleTemp.id)" `
+              -Headers $headers
+          }
+
+          $uploadBase = [string]$release.upload_url
+          if ([string]::IsNullOrWhiteSpace($uploadBase)) {
+            throw "GitHub no devolvio upload_url para el borrador."
+          }
+          $uploadBase = $uploadBase -replace '\{\?name,label\}$',''
+          $uploadUri = "$uploadBase?name=$([System.Uri]::EscapeDataString($tempAssetName))"
+
+          $tempUploaded = Invoke-RestMethod `
+            -Method Post `
+            -Uri $uploadUri `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -InFile "latest.corrected.json"
+
+          if (-not $tempUploaded -or $tempUploaded.name -ne $tempAssetName) {
+            throw "GitHub no confirmo la subida temporal del latest.json corregido."
+          }
+
+          Invoke-WebRequest `
+            -Uri $tempUploaded.url `
+            -OutFile "latest.temp.verify.json" `
+            -Headers $assetHeaders `
+            -UseBasicParsing
+
+          $tempRaw = Get-Content "latest.temp.verify.json" -Raw
+          $tempJson = $tempRaw | ConvertFrom-Json
+
+          if ([string]$tempJson.version -ne $env:FR_VERSION) {
+            throw "El latest.json temporal en GitHub tiene una version incorrecta."
+          }
+          if ($tempRaw -notmatch [regex]::Escape($expectedTagPath)) {
+            throw "El latest.json temporal en GitHub no apunta al tag $tag."
+          }
+          if ($tempRaw -notmatch [regex]::Escape($sigText)) {
+            throw "El latest.json temporal en GitHub no contiene la firma correcta."
+          }
+
+          Invoke-RestMethod `
+            -Method Delete `
+            -Uri "https://api.github.com/repos/$repo/releases/assets/$($latest.id)" `
+            -Headers $headers
+
+          $renameBody = @{ name = "latest.json" } | ConvertTo-Json
+          $renamed = Invoke-RestMethod `
+            -Method Patch `
+            -Uri "https://api.github.com/repos/$repo/releases/assets/$($tempUploaded.id)" `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $renameBody
+
+          if (-not $renamed -or $renamed.name -ne "latest.json") {
+            throw "GitHub no pudo renombrar el asset temporal a latest.json."
+          }
+
+          Invoke-WebRequest `
+            -Uri $renamed.url `
+            -OutFile "latest.final.verify.json" `
+            -Headers $assetHeaders `
+            -UseBasicParsing
+
+          $finalRaw = Get-Content "latest.final.verify.json" -Raw
+          $finalJson = $finalRaw | ConvertFrom-Json
+
+          if ([string]$finalJson.version -ne $env:FR_VERSION) {
+            throw "El latest.json final anuncia $($finalJson.version), no $env:FR_VERSION."
+          }
+          if ($finalRaw -notmatch [regex]::Escape($expectedTagPath)) {
+            throw "El latest.json final no apunta al tag $tag."
+          }
+          if ($finalRaw -notmatch [regex]::Escape($canonicalExeUrl)) {
+            throw "El latest.json final no apunta al .exe del borrador."
+          }
+          if ($finalRaw -notmatch [regex]::Escape($sigText)) {
+            throw "El latest.json final no contiene la firma del instalador."
+          }
+
+          $releaseFinal = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/$repo/releases/$($release.id)" `
+            -Headers $headers
+
+          if ($releaseFinal.draft -ne $true) {
+            throw "La release dejo de ser borrador antes de terminar las verificaciones."
+          }
+
+          $hasExe = $releaseFinal.assets | Where-Object { $_.name -match '\.exe$' } | Select-Object -First 1
+          $hasSig = $releaseFinal.assets | Where-Object { $_.name -match '\.exe\.sig$' } | Select-Object -First 1
+          $hasLatest = $releaseFinal.assets | Where-Object { $_.name -eq 'latest.json' } | Select-Object -First 1
+
+          if (-not $hasExe) { throw "Tras corregir latest.json falta el instalador .exe." }
+          if (-not $hasSig) { throw "Tras corregir latest.json falta la firma .exe.sig." }
+          if (-not $hasLatest) { throw "Tras corregir latest.json falta latest.json." }
+
+          "RELEASE_ID=$($release.id)" >> $env:GITHUB_ENV
+          Write-Host "Borrador verificado: .exe, .exe.sig y latest.json 0.1.8 apuntando a v0.1.8."
+
+      - name: Publicar SOLO despues de todas las verificaciones
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_ID)) {
+            throw "Falta RELEASE_ID; no se publica."
+          }
+
+          $repo = "${{ github.repository }}"
+          $tag = "v$env:FR_VERSION"
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+
+          $body = @{ draft = $false } | ConvertTo-Json
+          $published = Invoke-RestMethod `
+            -Method Patch `
+            -Uri "https://api.github.com/repos/$repo/releases/$env:RELEASE_ID" `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $body
+
+          if ($published.draft -ne $false) {
+            throw "GitHub no confirmo la publicacion de la release."
+          }
+          if ([string]$published.tag_name -ne $tag) {
+            throw "La release publicada tiene tag '$($published.tag_name)' y no '$tag'."
+          }
+
+          $exe = $published.assets | Where-Object { $_.name -match '\.exe$' } | Select-Object -First 1
+          $sig = $published.assets | Where-Object { $_.name -match '\.exe\.sig$' } | Select-Object -First 1
+          $latest = $published.assets | Where-Object { $_.name -eq 'latest.json' } | Select-Object -First 1
+
+          if (-not $exe) { throw "La release publicada no contiene instalador .exe." }
+          if (-not $sig) { throw "La release publicada no contiene firma .exe.sig." }
+          if (-not $latest) { throw "La release publicada no contiene latest.json." }
+
+          $expectedTagPath = "/releases/download/$tag/"
+          $actualExeUrl = [string]$exe.browser_download_url
+
+          if ([string]::IsNullOrWhiteSpace($actualExeUrl)) {
+            throw "El .exe publicado no contiene browser_download_url."
+          }
+          if ($actualExeUrl -notmatch [regex]::Escape($expectedTagPath)) {
+            throw "El .exe publicado no apunta al tag $tag."
+          }
+
+          # Verificacion PUBLICA final del latest.json ya con la release publicada.
+          $publicLatestUrl = "https://github.com/$repo/releases/download/$tag/latest.json"
+          Invoke-WebRequest `
+            -Uri $publicLatestUrl `
+            -OutFile "latest.public.verify.json" `
+            -UseBasicParsing
+
+          $publicRaw = Get-Content "latest.public.verify.json" -Raw
+          $publicJson = $publicRaw | ConvertFrom-Json
+
+          if ([string]$publicJson.version -ne $env:FR_VERSION) {
+            throw "latest.json publico anuncia $($publicJson.version), no $env:FR_VERSION."
+          }
+          if (-not $publicJson.platforms) {
+            throw "latest.json publico no contiene platforms."
+          }
+          if ($publicRaw -notmatch [regex]::Escape($expectedTagPath)) {
+            throw "latest.json publico no apunta al tag $tag."
+          }
+
+          $windowsOk = 0
+          foreach ($property in $publicJson.platforms.PSObject.Properties) {
+            if ($property.Name -like 'windows-*') {
+              $entry = $property.Value
+              if ($entry -and
+                  -not [string]::IsNullOrWhiteSpace([string]$entry.url) -and
+                  -not [string]::IsNullOrWhiteSpace([string]$entry.signature) -and
+                  ([string]$entry.url -match [regex]::Escape($expectedTagPath))) {
+                $windowsOk++
+              }
+            }
+          }
+
+          if ($windowsOk -lt 1) {
+            throw "latest.json publico no contiene una entrada Windows valida para $tag."
+          }
+
+          Write-Host "v$env:FR_VERSION publicada y verificada publicamente con .exe, .exe.sig y latest.json."
