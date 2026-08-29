@@ -1,0 +1,36 @@
+name: Factura Rapida - Snapshot Production UI for v0.1.42
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/snapshot-production-ui-v0142.yml'
+
+permissions:
+  contents: read
+
+env:
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+
+jobs:
+  snapshot:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Descargar UI exacta de produccion
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile production-source.html -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'}
+          $h=Get-Content production-source.html -Raw
+          foreach($m in @('data-fr-production-clean="1"','data-fr-webview-debug="1"','data-fr-facturar-real="8"','data-fr-login-clean="1"')){if(-not $h.Contains($m)){throw "Falta marcador productivo $m"}}
+          Write-Host "PRODUCTION_UI_BYTES=$((Get-Item production-source.html).Length)"
+          Write-Host "PRODUCTION_UI_SHA256=$((Get-FileHash production-source.html -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - name: Guardar snapshot exacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-ui-v0142-snapshot
+          path: production-source.html
+          retention-days: 7
