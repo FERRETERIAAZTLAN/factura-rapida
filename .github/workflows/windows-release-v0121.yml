@@ -1,0 +1,263 @@
+name: Factura Rapida - Release v0.1.21
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/windows-release-v0121.yml'
+      - 'release-v0121'
+      - 'tests/ui-login-smoke-v16.mjs'
+
+permissions:
+  contents: write
+
+env:
+  FR_VERSION: "0.1.21"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+
+jobs:
+  publish-windows:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validar version nueva
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = "v$env:FR_VERSION"
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) { throw "$tag ya existe" }
+          $global:LASTEXITCODE = 0
+
+      - name: Preparar Desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zip = Get-ChildItem -File -Filter "Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip" | Select-Object -First 1
+          if (-not $zip) { throw "No se encontro ZIP base" }
+          Expand-Archive -Path $zip.FullName -DestinationPath . -Force
+          if (-not (Test-Path "desktop")) { throw "No se creo desktop" }
+
+      - name: Descargar y validar interfaz limpia v15
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile "index.html" -UseBasicParsing
+          $html = Get-Content "index.html" -Raw
+          $required = @(
+            'data-fr-production-clean="1"',
+            'data-fr-facturar-real="8"',
+            'data-fr-usage-ui="1"',
+            'data-fr-business-mail-ui="1"',
+            'data-fr-issue-delivery="2"',
+            'data-fr-login-clean="1"',
+            "window.__frLoginUiVersion='15-clean'",
+            '.frWorking{opacity:.6;pointer-events:none}',
+            'body.loading{pointer-events:auto!important}',
+            'if(window.__frLoginPending)return',
+            "api('saveDraft',{draft:payload})",
+            "cfdiApi('preflight',{draftId:d.id})",
+            "readiness('ensure')",
+            "issueApi('timber',{draftId:d.id})",
+            'cfdi-issue-api',
+            'cfdi-usage-api',
+            'business-email-settings-api',
+            'gmail-mail-api',
+            'Uso de timbres',
+            'Comparar con Finkok',
+            'Correo y datos del negocio',
+            'Correo enviado',
+            'CFDI válido; correo pendiente'
+          )
+          foreach ($x in $required) { if (-not $html.Contains($x)) { throw "Falta contrato obligatorio: $x" } }
+          foreach ($x in @(
+            '>Finkok · DEMO<',
+            'Producción está bloqueada.',
+            'id="finkokSmokeBtn"',
+            'id="sandboxCsdForm"',
+            "function busy(v){loading=v;document.body.classList.toggle('loading',v)}",
+            "document.body.classList.toggle('loading',v)",
+            'if(loading)return;busy(true)'
+          )) { if ($html.Contains($x)) { throw "Contenido inseguro/prohibido: $x" } }
+
+      - name: Validar firma y updater
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw "Falta TAURI_SIGNING_PRIVATE_KEY" }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) { throw "Falta TAURI_SIGNING_PRIVATE_KEY_PASSWORD" }
+          if ([string]::IsNullOrWhiteSpace($env:FR_UPDATER_PUBKEY)) { throw "Falta TAURI_UPDATER_PUBKEY" }
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependencias Desktop
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Asegurar serde_json
+        working-directory: desktop/src-tauri
+        shell: pwsh
+        run: |
+          if (-not (Select-String -Path "Cargo.toml" -Pattern "serde_json" -Quiet)) { cargo add serde_json@1 }
+
+      - name: Establecer version
+        working-directory: desktop
+        run: node scripts/set-version.mjs "${{ env.FR_VERSION }}"
+
+      - name: Sincronizar interfaz
+        working-directory: desktop
+        run: npm run sync-web
+
+      - name: Verificar paquete final y orden fiscal
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $path = "desktop/dist/index.html"
+          if (-not (Test-Path $path)) { throw "Falta desktop/dist/index.html" }
+          $html = Get-Content $path -Raw
+          foreach($x in @(
+            'data-fr-facturar-real="8"','data-fr-usage-ui="1"','data-fr-business-mail-ui="1"','data-fr-issue-delivery="2"','data-fr-login-clean="1"',
+            "window.__frLoginUiVersion='15-clean'",'cfdi-issue-api','business-email-settings-api','gmail-mail-api'
+          )){if(-not $html.Contains($x)){throw "No llego al paquete: $x"}}
+          if($html.Contains("document.body.classList.toggle('loading',v)")){throw "Persistio bloqueo global loading"}
+          if($html.Contains('if(loading)return;busy(true)')){throw "Login depende de loading global"}
+          $script = @'
+          const fs=require('fs');
+          const h=fs.readFileSync('desktop/dist/index.html','utf8');
+          const a=h.match(/<script data-fr-facturar-real="8">([\s\S]*?)<\/script>/);
+          const b=h.match(/<script data-fr-usage-ui="1">([\s\S]*?)<\/script>/);
+          const c=h.match(/<script data-fr-business-mail-ui="1">([\s\S]*?)<\/script>/);
+          const lr=h.match(/<script data-fr-login-clean="1">([\s\S]*?)<\/script>/);
+          if(!a||!b||!c||!lr) throw new Error('Falta controlador obligatorio');
+          const s=a[1];
+          const tokens=["api('saveDraft',{draft:payload})","cfdiApi('preflight',{draftId:d.id})","readiness('ensure')","const ok=confirm('Vas a emitir un CFDI REAL","issueApi('timber',{draftId:d.id})","cart=[]"];
+          const pos=tokens.map(x=>s.indexOf(x));
+          if(pos.some(x=>x<0)) throw new Error('Falta etapa FACTURAR '+JSON.stringify(pos));
+          for(let i=1;i<pos.length;i++) if(pos[i]<=pos[i-1]) throw new Error('Orden inseguro FACTURAR '+JSON.stringify(pos));
+          if(s.includes("const r=await cfdiApi('timber',{draftId:d.id});")) throw new Error('Timbrado anterior presente');
+          if(!h.includes('if(window.__frLoginPending)return')) throw new Error('Falta guardia exclusiva de login');
+          if(!h.includes('body.loading{pointer-events:auto!important}')) throw new Error('Falta neutralizar body.loading');
+          new Function(s); new Function(b[1]); new Function(c[1]); new Function(lr[1]);
+          console.log('Estructura OK: login limpio + FACTURAR seguro + Timbres + Correo');
+          '@
+          node -e $script
+          $tauri = Get-Content "desktop/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
+          if ([string]$tauri.build.frontendDist -ne "../dist") { throw "Tauri no apunta a ../dist" }
+
+      - name: Prueba runtime real del login en DOM
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory "smoke-test" -Force | Out-Null
+          Copy-Item "tests/ui-login-smoke-v16.mjs" "smoke-test/ui-login-smoke-v16.mjs" -Force
+          Push-Location "smoke-test"
+          npm init -y | Out-Null
+          npm install jsdom@25 --no-audit --no-fund
+          node ui-login-smoke-v16.mjs "../desktop/dist/index.html"
+          Pop-Location
+
+      - name: Configurar actualizador
+        shell: pwsh
+        run: |
+          $config = @{
+            bundle = @{ createUpdaterArtifacts = $true }
+            plugins = @{ updater = @{
+              pubkey = $env:FR_UPDATER_PUBKEY
+              endpoints = @("https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json")
+            }}
+          }
+          $config | ConvertTo-Json -Depth 10 | Set-Content "desktop/src-tauri/tauri.release.conf.json" -Encoding UTF8
+
+      - name: Compilar firmar y publicar
+        uses: tauri-apps/tauri-action@action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          tagName: "v__VERSION__"
+          releaseName: "Factura Rapida v__VERSION__"
+          releaseBody: "Login reconstruido desde base productiva v12 y probado en runtime DOM. Conserva Finkok PRODUCCION, Timbres, Gmail por negocio y entrega PDF/XML posterior al UUID."
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterSignatures: true
+          args: "--config src-tauri/tauri.release.conf.json --bundles nsis"
+
+      - name: Esperar release publica
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $repo="${{ github.repository }}"; $tag="v$env:FR_VERSION"; $found=$false
+          for($i=1;$i -le 25;$i++){
+            gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName *> release.json
+            if($LASTEXITCODE -eq 0){$r=Get-Content release.json -Raw|ConvertFrom-Json;if($r.tagName -eq $tag -and -not $r.isDraft -and -not $r.isPrerelease){$found=$true;break}}
+            Start-Sleep -Seconds 3
+          }
+          if(-not $found){throw "Release publica no aparecio"}
+
+      - name: Reconstruir latest.json desde activos publicados
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $repo="${{ github.repository }}"; $tag="v$env:FR_VERSION"
+          $assets=gh release view $tag --repo $repo --json assets|ConvertFrom-Json
+          $exe=$assets.assets|Where-Object{$_.name -match '\.exe$'}|Select-Object -First 1
+          $sig=$assets.assets|Where-Object{$_.name -match '\.exe\.sig$'}|Select-Object -First 1
+          if(-not $exe -or -not $sig){throw "Faltan EXE o firma"}
+          New-Item -ItemType Directory release-files -Force|Out-Null
+          gh release download $tag --repo $repo --pattern "*.exe.sig" --dir release-files --clobber
+          $sigFile=Get-ChildItem release-files -File -Filter "*.exe.sig"|Select-Object -First 1
+          $sigText=(Get-Content $sigFile.FullName -Raw).Trim()
+          if([string]::IsNullOrWhiteSpace($sigText)){throw "Firma vacia"}
+          $url="https://github.com/$repo/releases/download/$tag/$([uri]::EscapeDataString($exe.name).Replace('%20','%20'))"
+          $latest=[ordered]@{version=$env:FR_VERSION;notes="Factura Rapida $env:FR_VERSION - login reconstruido y probado en runtime, facturacion real, timbres y correo por negocio.";pub_date=[DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");platforms=[ordered]@{"windows-x86_64"=[ordered]@{signature=$sigText;url=$url}}}
+          $latest|ConvertTo-Json -Depth 8|Set-Content latest.json -Encoding UTF8
+          gh release upload $tag latest.json --clobber --repo $repo
+
+      - name: Verificacion final release updater
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference="Stop"
+          $repo="${{ github.repository }}"; $tag="v$env:FR_VERSION"; Start-Sleep -Seconds 4
+          $release=gh release view $tag --repo $repo --json isDraft,isPrerelease,assets,tagName|ConvertFrom-Json
+          if($release.tagName -ne $tag -or $release.isDraft -or $release.isPrerelease){throw "Release no estable"}
+          $exe=$release.assets|Where-Object{$_.name -match '\.exe$'}|Select-Object -First 1
+          $sig=$release.assets|Where-Object{$_.name -match '\.exe\.sig$'}|Select-Object -First 1
+          $latestAsset=$release.assets|Where-Object{$_.name -eq 'latest.json'}|Select-Object -First 1
+          if(-not $exe -or -not $sig -or -not $latestAsset){throw "Release incompleta"}
+          New-Item -ItemType Directory verify-files -Force|Out-Null
+          gh release download $tag --repo $repo --pattern "latest.json" --dir verify-files --clobber
+          gh release download $tag --repo $repo --pattern "*.exe.sig" --dir verify-files --clobber
+          $j=Get-Content verify-files/latest.json -Raw|ConvertFrom-Json
+          $sigFile=Get-ChildItem verify-files -File -Filter "*.exe.sig"|Select-Object -First 1
+          $sigText=(Get-Content $sigFile.FullName -Raw).Trim()
+          if([string]$j.version -ne $env:FR_VERSION){throw "Version latest incorrecta"}
+          $p=$j.platforms.'windows-x86_64';if(-not $p){throw "Falta plataforma windows-x86_64"}
+          if([string]$p.signature.Trim() -ne $sigText){throw "Firma updater no coincide"}
+          if([string]$p.url -notmatch "/releases/download/v$([regex]::Escape($env:FR_VERSION))/"){throw "URL updater incorrecta"}
+          Write-Host "v$env:FR_VERSION VERIFICADA: runtime login, FACTURAR real, Finkok, Timbres, Gmail, EXE firmado y updater"
