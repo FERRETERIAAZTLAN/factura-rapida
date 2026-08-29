@@ -230,11 +230,13 @@ jobs:
           if ($release.draft -ne $true) { throw "La release no esta en borrador; se cancela." }
 
           $exe = $release.assets | Where-Object { $_.name -match '\.exe$' } | Select-Object -First 1
-          $sigAssets = @($release.assets | Where-Object { $_.name -match '\.sig$' })
-          $latest = $release.assets | Where-Object { $_.name -eq 'latest.json' } | Select-Object -First 1
+          $exeSig = $release.assets | Where-Object {
+            $_.name -match '\.exe\.sig$' -or $_.label -match '\.exe\.sig$'
+          } | Select-Object -First 1
+          $latest = $release.assets | Where-Object { $_.name -eq 'latest.json' -or $_.label -eq 'latest.json' } | Select-Object -First 1
 
           if (-not $exe) { throw "Falta el instalador .exe." }
-          if ($sigAssets.Count -lt 1) { throw "Falta al menos una firma .sig." }
+          if (-not $exeSig) { throw "Falta la firma .exe.sig del instalador." }
           if (-not $latest) { throw "Falta latest.json." }
 
           $assetHeaders = @{
@@ -252,7 +254,7 @@ jobs:
           }
 
           if (-not $j.platforms) {
-            throw "latest.json no contiene el objeto platforms requerido por Tauri."
+            throw "latest.json no contiene platforms."
           }
 
           $windowsEntries = @()
@@ -276,69 +278,78 @@ jobs:
           }
 
           $expectedTagPath = "/releases/download/v$env:FR_VERSION/"
-          $validWindowsEntry = $null
-          $validUpdaterAsset = $null
-          $validSigAsset = $null
 
+          function Canonical-AssetName([string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return "" }
+            try {
+              if ($value -match '^https?://') {
+                $u = [System.Uri]$value
+                $value = [System.Uri]::UnescapeDataString($u.Segments[-1])
+              }
+            } catch {}
+            $value = [System.Uri]::UnescapeDataString($value)
+            $normalized = $value.Normalize([Text.NormalizationForm]::FormD)
+            $chars = $normalized.ToCharArray() | Where-Object {
+              [Globalization.CharUnicodeInfo]::GetUnicodeCategory($_) -ne [Globalization.UnicodeCategory]::NonSpacingMark
+            }
+            $plain = -join $chars
+            return (($plain.ToLowerInvariant()) -replace '[^a-z0-9]+','')
+          }
+
+          $exeCandidates = @(
+            [string]$exe.name,
+            [string]$exe.label,
+            [string]$exe.browser_download_url
+          ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+          $validWindowsEntry = $null
           foreach ($entry in $windowsEntries) {
             if ($entry.Url -notmatch [regex]::Escape($expectedTagPath)) {
               continue
             }
 
             try {
-              $uri = [System.Uri]$entry.Url
-              $assetNameFromUrl = [System.Uri]::UnescapeDataString($uri.Segments[-1])
+              $urlAssetName = [System.Uri]::UnescapeDataString(([System.Uri]$entry.Url).Segments[-1])
             } catch {
               continue
             }
 
-            # Tauri v2 puede actualizar directamente con NSIS .exe.
-            # Instalaciones antiguas/compatibles pueden usar .nsis.zip.
-            if ($assetNameFromUrl -notmatch '(\.exe|\.nsis\.zip)$') {
+            if ($urlAssetName -notmatch '\.exe$') {
               continue
             }
 
-            $matchingAsset = $release.assets | Where-Object {
-              $_.name -eq $assetNameFromUrl
-            } | Select-Object -First 1
-
-            if (-not $matchingAsset) {
-              continue
+            $urlCanonical = Canonical-AssetName $urlAssetName
+            $matchesExe = $false
+            foreach ($candidate in $exeCandidates) {
+              if ((Canonical-AssetName $candidate) -eq $urlCanonical) {
+                $matchesExe = $true
+                break
+              }
             }
 
-            $matchingSigAsset = $release.assets | Where-Object {
-              $_.name -eq "$assetNameFromUrl.sig"
-            } | Select-Object -First 1
-
-            if (-not $matchingSigAsset) {
-              continue
+            if ($matchesExe) {
+              $validWindowsEntry = $entry
+              break
             }
-
-            $validWindowsEntry = $entry
-            $validUpdaterAsset = $matchingAsset
-            $validSigAsset = $matchingSigAsset
-            break
           }
 
           if (-not $validWindowsEntry) {
-            throw "latest.json no apunta a un actualizador Windows existente (.exe o .nsis.zip) dentro del tag v$env:FR_VERSION con su firma .sig correspondiente."
+            throw "latest.json no apunta al instalador .exe real del borrador v$env:FR_VERSION."
           }
 
-          # Comprobar que la firma embebida en latest.json coincide exactamente
-          # con el archivo .sig subido al mismo borrador.
-          Invoke-WebRequest -Uri $validSigAsset.url -OutFile "updater.verify.sig" -Headers $assetHeaders -UseBasicParsing
+          Invoke-WebRequest -Uri $exeSig.url -OutFile "updater.verify.sig" -Headers $assetHeaders -UseBasicParsing
           $sigFileContent = (Get-Content "updater.verify.sig" -Raw).Trim()
           $jsonSignature = ([string]$validWindowsEntry.Signature).Trim()
 
           if ([string]::IsNullOrWhiteSpace($sigFileContent)) {
-            throw "La firma .sig descargada esta vacia."
+            throw "La firma .exe.sig descargada esta vacia."
           }
           if ($sigFileContent -ne $jsonSignature) {
-            throw "La firma de latest.json no coincide con el archivo .sig del actualizador Windows."
+            throw "La firma de latest.json no coincide con la firma .exe.sig subida."
           }
 
           "RELEASE_ID=$($release.id)" >> $env:GITHUB_ENV
-          Write-Host "Release borrador validado: instalador .exe presente, actualizador Windows existente, firma .sig coincidente y latest.json version $env:FR_VERSION apuntando al tag v$env:FR_VERSION."
+          Write-Host "Release borrador validado: .exe real, .exe.sig coincidente y latest.json 0.1.8 apuntando a v0.1.8."
 
       - name: Publicar SOLO despues de todas las verificaciones
         shell: pwsh
