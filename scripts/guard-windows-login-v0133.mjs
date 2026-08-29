@@ -7,6 +7,7 @@ const css = `<style id="frWindowsLoginHitCss" data-fr-windows-login-hit="1">
 #authLayer{position:fixed!important;inset:0!important;z-index:2147483000!important;pointer-events:auto!important;isolation:isolate!important}
 html.fr-native-desktop #authLayer{top:34px!important}
 #authLayer.hidden{display:none!important}
+#authLayer::before,#authLayer::after{pointer-events:none!important}
 #authLayer #businessCode,#authLayer #loginUser,#authLayer #loginPin,#authLayer #loginBtn,#authLayer #loginForm{position:relative!important;z-index:2147483001!important;pointer-events:auto!important}
 body.loading #authLayer{pointer-events:auto!important}
 [data-fr-login-blocked="1"]{pointer-events:none!important}
@@ -20,7 +21,7 @@ const js = `<script id="frWindowsLoginHitJs" data-fr-windows-login-hit="1">
   const visible=el=>!!el&&!el.classList.contains('hidden')&&getComputedStyle(el).display!=='none'&&getComputedStyle(el).visibility!=='hidden';
   const neutralized=new Set();
   function clearNeutralized(){for(const el of neutralized){try{el.removeAttribute('data-fr-login-blocked')}catch{}}neutralized.clear()}
-  function isSafeTop(top,target,a){return !!top&&(top===target||target.contains(top)||top===a||a?.contains(top)&&top.contains(target));}
+  function isSafeTop(top,target){return !!top&&(top===target||target.contains(top));}
   function neutralizeAt(target,a){
     const r=target.getBoundingClientRect();
     if(!(r.width>2&&r.height>2))return {ok:false,id:target.id,reason:'zero-rect',rect:[r.left,r.top,r.width,r.height]};
@@ -28,7 +29,7 @@ const js = `<script id="frWindowsLoginHitJs" data-fr-windows-login-hit="1">
     const y=Math.max(0,Math.min(innerHeight-1,r.top+r.height/2));
     for(let pass=0;pass<8;pass++){
       const top=document.elementFromPoint(x,y);
-      if(isSafeTop(top,target,a)) return {ok:true,id:target.id,top:top?.id||top?.tagName||''};
+      if(isSafeTop(top,target)) return {ok:true,id:target.id,top:top?.id||top?.tagName||''};
       const stack=document.elementsFromPoint?document.elementsFromPoint(x,y):[top].filter(Boolean);
       let changed=false;
       for(const el of stack){
@@ -40,7 +41,7 @@ const js = `<script id="frWindowsLoginHitJs" data-fr-windows-login-hit="1">
       if(!changed)return {ok:false,id:target.id,reason:'blocked',top:top?.id||top?.className||top?.tagName||''};
     }
     const top=document.elementFromPoint(x,y);
-    return {ok:isSafeTop(top,target,a),id:target.id,reason:'max-passes',top:top?.id||top?.className||top?.tagName||''};
+    return {ok:isSafeTop(top,target),id:target.id,reason:'max-passes',top:top?.id||top?.className||top?.tagName||''};
   }
   function reportNative(report){
     if(reported||!report.ok)return;
