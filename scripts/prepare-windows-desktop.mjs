@@ -5,6 +5,7 @@ const root = process.cwd();
 const desktop = resolve(root, 'desktop');
 const syncPath = resolve(desktop, 'scripts', 'sync-web.mjs');
 const rustPath = resolve(desktop, 'src-tauri', 'src', 'main.rs');
+const tauriPath = resolve(desktop, 'src-tauri', 'tauri.conf.json');
 
 let sync = await readFile(syncPath, 'utf8');
 const oldSource = 'const source = resolve(repo, "index.html");';
@@ -25,6 +26,14 @@ for (const [from, to] of replacements) {
   if (rust.includes(from)) rust = rust.replace(from, to);
   else if (!rust.includes(to)) throw new Error(`main.rs: no se encontró patrón esperado: ${from}`);
 }
+for (const marker of ['desktop_info', 'check_for_updates', 'install_update']) {
+  if (!rust.includes(marker)) throw new Error(`main.rs: falta comando nativo requerido: ${marker}`);
+}
 await writeFile(rustPath, rust, 'utf8');
 
-console.log('PREPARE WINDOWS DESKTOP OK: sync-web usa FR_WEB_SOURCE y Rust reporta CARGO_PKG_VERSION.');
+const tauri = JSON.parse(await readFile(tauriPath, 'utf8'));
+tauri.app ??= {};
+tauri.app.withGlobalTauri = true;
+await writeFile(tauriPath, JSON.stringify(tauri, null, 2) + '\n', 'utf8');
+
+console.log('PREPARE WINDOWS DESKTOP OK: sync-web usa FR_WEB_SOURCE, Rust reporta CARGO_PKG_VERSION y Tauri expone window.__TAURI__.');
