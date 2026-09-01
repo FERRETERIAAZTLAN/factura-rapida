@@ -11,18 +11,20 @@ const updaterEndpoint = 'https://github.com/FERRETERIAAZTLAN/factura-rapida/rele
 const technicalIdentifier = 'com.facturarapida.desktop';
 const technicalLogName = 'factura-rapida-startup.log';
 
+// Solo nombres heredados que son texto visible. No sustituir "solrak" de forma
+// global: forma parte de filenames y namespaces técnicos de v0.1.62.
 const oldVisibleNames = [
   'Factura Rápida',
   'Factura Rapida',
   'FACTURA RÁPIDA',
   'FACTURA RAPIDA',
-  'Solrak',
-  'solrak',
 ];
 
 function replaceVisibleBrand(text) {
   let out = text;
   for (const oldName of oldVisibleNames) out = out.split(oldName).join(brand);
+  // Variantes de v0.1.61 solo cuando son literales/texto HTML, no identificadores.
+  out = out.replace(/([>"'])Solrak(?=([<"']|\s))/g, `$1${brand}`);
   return out;
 }
 
@@ -50,27 +52,22 @@ await writeFile(tauriPath, `${JSON.stringify(tauri, null, 2)}\n`, 'utf8');
 
 let html = await readFile(htmlPath, 'utf8');
 html = replaceVisibleBrand(html);
-if (/<title>\s*<\/title>/i.test(html)) {
-  html = html.replace(/<title>\s*<\/title>/i, `<title>${brand}</title>`);
-}
+if (/<title>\s*<\/title>/i.test(html)) html = html.replace(/<title>\s*<\/title>/i, `<title>${brand}</title>`);
 await writeFile(htmlPath, html, 'utf8');
 
-// Sustituir únicamente textos visibles también en módulos que se copian al paquete.
-// Los nombres técnicos de archivo/namespace se preservan para compatibilidad.
 for (const file of [
   'quotes-module.js',
   'quotes-email-module.js',
   'product-images-module.js',
   'pos-module.js',
   'solrak-desktop-v0162.js',
-]) {
-  await replaceOptional(`${desktop}/dist/${file}`);
-}
+]) await replaceOptional(`${desktop}/dist/${file}`);
 
-// El puente nativo puede contener mensajes visibles del actualizador. Se cambia la
-// marca mostrada, no el endpoint, comandos, storage ni identificadores técnicos.
 await replaceOptional(syncPath);
 
+// Guardas técnicas: el rebranding jamás puede renombrar estos contratos.
+const finalHtml = await readFile(htmlPath, 'utf8');
+if (!finalHtml.includes('solrak-desktop-v0162.js?v=1')) throw new Error('Se alteró el filename técnico del shell SOLRAK');
 const rust = await readFile(rustPath, 'utf8');
 if (!rust.includes(updaterEndpoint)) throw new Error('Cambió el endpoint técnico del updater');
 if (!rust.includes(technicalLogName)) throw new Error('Cambió el canal técnico de diagnóstico');
