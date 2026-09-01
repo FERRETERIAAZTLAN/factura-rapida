@@ -1,0 +1,53 @@
+name: SOLRAK v0.1.68 Simple UI Safe Test
+
+on:
+  push:
+    branches: [feature/v0.1.68-simple-ui]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias de prueba
+        run: npm install --no-save --no-audit --no-fund jsdom@25
+
+      - name: Validar interfaz simple y regresiones
+        run: |
+          node --check solrak-simple-ui-v0168.js
+          node --check tests/solrak-simple-ui-v0168-smoke.mjs
+          node tests/solrak-simple-ui-v0168-smoke.mjs
+          node tests/solrak-pos-clear-footer-v0167-smoke.mjs
+          node tests/solrak-professional-pos-v0166-smoke.mjs
+          node tests/solrak-pos-workspace-v0165-smoke.mjs
+          node tests/pos-module-smoke.mjs
+          node tests/pos-suma-v0163-smoke.mjs
+          node tests/solrak-v0164-cash-report-contract.mjs
+
+      - name: Confirmar aislamiento visual
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q -- '--solrak-simple-side:210px' solrak-simple-ui-v0168.js
+          grep -q 'data-solrak-simple-ui="1".*#frBrandPill' solrak-simple-ui-v0168.js
+          grep -q 'grid-template-columns:minmax(0,1fr) 270px' solrak-simple-ui-v0168.js
+          grep -q 'solrakSimpleAdvancedToggle' solrak-simple-ui-v0168.js
+          if grep -Eiq 'fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|finkok|supabase' solrak-simple-ui-v0168.js; then
+            echo 'La interfaz simple invadió red, venta, Supabase o CFDI' >&2
+            exit 1
+          fi
+          echo 'SOLRAK_V0168_SIMPLE_UI_SAFE_OK'
