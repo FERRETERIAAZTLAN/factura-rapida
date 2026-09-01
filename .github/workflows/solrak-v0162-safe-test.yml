@@ -1,0 +1,143 @@
+name: SOLRAK v0.1.62 Safe Test
+
+on:
+  push:
+    branches: [feature/v0.1.62-solrak-uppercase-macpos]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+  FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
+  FR_PRODUCT_IMAGE_API: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/product-image-api"
+
+jobs:
+  safe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Sintaxis logo y pruebas aisladas
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund jsdom@25
+          node --check solrak-desktop-v0162.js
+          node --check solrak-logo-v0162.js
+          node --check scripts/apply-solrak-brand-v0162.mjs
+          node tests/pos-module-smoke.mjs
+          node tests/solrak-desktop-v0162-smoke.mjs
+          node tests/solrak-logo-v0162-smoke.mjs
+          test -s branding/solrak-icon.svg
+          grep -q 'viewBox="0 0 1024 1024"' branding/solrak-icon.svg
+          grep -q '#10B9FF' branding/solrak-icon.svg
+          if grep -Eiq 'cfdi-api|finkok' solrak-desktop-v0162.js solrak-logo-v0162.js; then
+            echo 'El rediseño/logo no debe tocar CFDI/Finkok' >&2
+            exit 1
+          fi
+          echo 'SOLRAK_V0162_UNIT_SAFE_OK'
+
+      - name: Reconstruir FIX1 validada y generar iconos Tauri
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show "$FR_FIX1_COMMIT:Factura_Rapida_Desktop_Windows_FIX1.zip" > FIX1.zip
+          echo '144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134  FIX1.zip' | sha256sum -c -
+          unzip -q -o FIX1.zip
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          node scripts/ensure-rust-deps-v0143.mjs desktop/src-tauri/Cargo.toml
+          cd desktop
+          npm install --no-audit --no-fund
+          node scripts/set-version.mjs 0.1.62
+          npm run tauri -- icon ../branding/solrak-icon.svg
+          cd ..
+          test -s desktop/src-tauri/icons/icon.ico
+          test -s desktop/src-tauri/icons/32x32.png
+          test -s desktop/src-tauri/icons/128x128.png
+          test -s desktop/src-tauri/icons/128x128@2x.png
+          echo 'SOLRAK_TAURI_ICONS_OK'
+
+      - name: Sincronizar UI productiva sin tocar CFDI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "$FR_PRODUCTION_UI_URL" -o production-source.html
+          test "$(wc -c < production-source.html)" -gt 10000
+          export FR_WEB_SOURCE="$PWD/production-source.html"
+          cd desktop
+          npm run sync-web
+          cd ..
+          node scripts/sanitize-production-ui-v0142.mjs desktop/dist/index.html
+          node scripts/clean-webview-startup-v0148.mjs desktop/dist/index.html
+          node scripts/fix-facturar-mutation-v0148.mjs desktop/dist/index.html
+
+      - name: Integrar módulos estables shell y logo SOLRAK
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in quotes-module.js quotes-email-module.js product-images-module.js pos-module.js solrak-desktop-v0162.js solrak-logo-v0162.js; do
+            cp "$f" "desktop/dist/$f"
+            node --check "desktop/dist/$f"
+          done
+          node - <<'NODE'
+          const fs=require('fs');
+          const p='desktop/dist/index.html';
+          let h=fs.readFileSync(p,'utf8');
+          const tags=['<script src="solrak-desktop-v0162.js?v=1"></script>','<script src="solrak-logo-v0162.js?v=1"></script>'];
+          for(const tag of tags)if(!h.includes(tag))h=h.replace('</body>',tag+'\n</body>');
+          fs.writeFileSync(p,h);
+          NODE
+          node scripts/apply-solrak-brand-v0162.mjs desktop
+          node tests/solrak-brand-v0162-smoke.mjs desktop
+          grep -q 'solrak-desktop-v0162.js?v=1' desktop/dist/index.html
+          grep -q 'solrak-logo-v0162.js?v=1' desktop/dist/index.html
+          grep -q 'SOLRAK' desktop/dist/index.html
+          grep -q 'solrakLogoSvg' desktop/dist/solrak-logo-v0162.js
+          if grep -Fq 'Solrak' desktop/dist/index.html; then exit 1; fi
+          echo 'SOLRAK_V0162_PACKAGED_UI_LOGO_OK'
+
+      - name: Backend de imágenes productivo read-only health
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re
+          h=open('desktop/dist/index.html',encoding='utf-8').read()
+          m=re.search(r"const\s+ANON_KEY\s*=\s*['\"]([^'\"]+)['\"]",h)
+          if not m: raise SystemExit('No se encontró ANON_KEY pública')
+          open('/tmp/anon','w').write(m.group(1))
+          PY
+          ANON="$(cat /tmp/anon)"
+          R="$(curl --fail --silent --show-error -X POST "$FR_PRODUCT_IMAGE_API" -H "Authorization: Bearer $ANON" -H "apikey: $ANON" -H 'content-type: application/json' --data '{"action":"health"}')"
+          node -e 'const r=JSON.parse(process.argv[1]);if(!r.ok||r.service!=="product-image-api"||r.version!==2||r.manualUpload!==true)throw new Error("product-image-api v2 health inválido");console.log("PRODUCT_IMAGE_API_V2_HEALTH_OK")' "$R"
+
+      - name: Auditoría de compatibilidad
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs=require('fs');
+          const t=JSON.parse(fs.readFileSync('desktop/src-tauri/tauri.conf.json','utf8'));
+          if(t.productName!=='SOLRAK')throw new Error('productName no es SOLRAK');
+          if(t.identifier!=='com.facturarapida.desktop')throw new Error('identifier técnico cambió');
+          const w=(t.app?.windows||[]).find(x=>x.label==='main');
+          if(!w||w.title!=='SOLRAK')throw new Error('título de ventana no es SOLRAK');
+          const r=fs.readFileSync('desktop/src-tauri/src/main.rs','utf8');
+          if(!r.includes('https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json'))throw new Error('updater cambió');
+          if(!r.includes('factura-rapida-startup.log'))throw new Error('diagnóstico técnico cambió');
+          for(const f of ['icon.ico','32x32.png','128x128.png','128x128@2x.png']){
+            const p='desktop/src-tauri/icons/'+f;if(!fs.existsSync(p)||fs.statSync(p).size<500)throw new Error('Icono faltante o vacío '+f);
+          }
+          console.log('SOLRAK_V0162_COMPATIBILITY_LOGO_OK');
+          NODE
