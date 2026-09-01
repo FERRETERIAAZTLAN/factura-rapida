@@ -1,0 +1,107 @@
+name: SOLRAK v0.1.65 Fullscreen POS Safe Test
+
+on:
+  push:
+    branches: [feature/v0.1.65-fullscreen-pos]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+  FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
+
+jobs:
+  safe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Probar espacio de Ventas y POS transaccional
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund jsdom@25
+          node --check pos-module.js
+          node --check solrak-pos-workspace-v0165.js
+          node tests/solrak-pos-workspace-v0165-smoke.mjs
+          node tests/pos-suma-v0163-smoke.mjs
+          node tests/solrak-sales-report-v0163-smoke.mjs
+          if grep -Eiq 'fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|finkok' solrak-pos-workspace-v0165.js; then
+            echo 'La capa visual v0.1.65 invadió red, venta o CFDI' >&2
+            exit 1
+          fi
+          grep -q "posApi('completeSale'" pos-module.js
+          grep -Fq 'payments:[payment]' pos-module.js
+
+      - name: Reconstruir FIX1 y sincronizar UI productiva
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show "$FR_FIX1_COMMIT:Factura_Rapida_Desktop_Windows_FIX1.zip" > FIX1.zip
+          echo '144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134  FIX1.zip' | sha256sum -c -
+          unzip -q -o FIX1.zip
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          node scripts/ensure-rust-deps-v0143.mjs desktop/src-tauri/Cargo.toml
+          cd desktop
+          npm install --no-audit --no-fund
+          node scripts/set-version.mjs 0.1.65
+          cd ..
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "$FR_PRODUCTION_UI_URL" -o production-source.html
+          test "$(wc -c < production-source.html)" -gt 10000
+          export FR_WEB_SOURCE="$PWD/production-source.html"
+          cd desktop
+          npm run sync-web
+          cd ..
+          node scripts/sanitize-production-ui-v0142.mjs desktop/dist/index.html
+          node scripts/clean-webview-startup-v0148.mjs desktop/dist/index.html
+          node scripts/fix-facturar-mutation-v0148.mjs desktop/dist/index.html
+
+      - name: Empaquetar Ventas a pantalla completa
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in quotes-module.js quotes-email-module.js product-images-module.js pos-module.js solrak-desktop-v0162.js solrak-logo-v0162.js solrak-desktop-v0163.js solrak-sales-report-v0163.js solrak-pos-workspace-v0165.js; do
+            cp "$f" "desktop/dist/$f"
+            node --check "desktop/dist/$f"
+          done
+          node - <<'NODE'
+          const fs=require('fs');
+          const p='desktop/dist/index.html';let h=fs.readFileSync(p,'utf8');
+          const tags=['<script src="solrak-desktop-v0162.js?v=1"></script>','<script src="solrak-logo-v0162.js?v=1"></script>','<script src="solrak-desktop-v0163.js?v=1"></script>','<script src="solrak-sales-report-v0163.js?v=1"></script>','<script src="solrak-pos-workspace-v0165.js?v=1"></script>'];
+          for(const tag of tags)if(!h.includes(tag))h=h.replace('</body>',tag+'\n</body>');
+          fs.writeFileSync(p,h);
+          NODE
+          node scripts/apply-solrak-brand-v0162.mjs desktop
+          grep -q 'solrak-pos-workspace-v0165.js?v=1' desktop/dist/index.html
+          grep -q 'data-solrak-pos-workspace' desktop/dist/solrak-pos-workspace-v0165.js
+          grep -q 'Escanea un código o escribe para buscar' desktop/dist/pos-module.js
+
+      - name: Auditar compatibilidad final
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs=require('fs');
+          const t=JSON.parse(fs.readFileSync('desktop/src-tauri/tauri.conf.json','utf8'));
+          if(t.identifier!=='com.facturarapida.desktop')throw new Error('identifier técnico cambió');
+          const rust=fs.readFileSync('desktop/src-tauri/src/main.rs','utf8');
+          if(!rust.includes('https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json'))throw new Error('updater cambió');
+          const visual=fs.readFileSync('desktop/dist/solrak-pos-workspace-v0165.js','utf8');
+          if(/fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|finkok/i.test(visual))throw new Error('capa visual invadió lógica productiva');
+          for(const marker of ['main.shell>.top','main.shell>.statusgrid',"closest('aside.summary')",'grid-template-rows:auto minmax(0,1fr)'])if(!visual.includes(marker))throw new Error('marcador visual ausente: '+marker);
+          const pos=fs.readFileSync('desktop/dist/pos-module.js','utf8');
+          if(!pos.includes("posApi('completeSale'")||!pos.includes('payments:[payment]'))throw new Error('venta transaccional cambió');
+          if(/cfdi-api|finkok/i.test(pos))throw new Error('POS tocó CFDI/Finkok');
+          console.log('SOLRAK_V0165_FULLSCREEN_POS_COMPATIBILITY_OK');
+          NODE
