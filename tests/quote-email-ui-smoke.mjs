@@ -14,10 +14,10 @@ window.__fetch=async(url,opts)=>{
   const body=JSON.parse(String(opts?.body||'{}'));
   if(String(url).includes('/quote-api')&&body.action==='listQuotes'){
     listCalls++;
-    return {ok:true,status:200,json:async()=>({ok:true,quotes:[{id:'${id}',customer_email:'cliente@example.com',last_email_sent_at:sent?'2026-09-01T06:00:00Z':null,last_email_to:sent?'cliente@example.com':null,email_send_count:sent?1:0,last_email_error:null}]})};
+    return {ok:true,status:200,json:async()=>({ok:true,quotes:[{id,customer_email:'cliente@example.com',last_email_sent_at:sent?'2026-09-01T06:00:00Z':null,last_email_to:sent?'cliente@example.com':null,email_send_count:sent?1:0,last_email_error:null}]})};
   }
   if(String(url).includes('/quote-delivery-api')&&body.action==='sendQuote'){
-    if(body.quoteId!=='${id}'||body.recipient!=='cliente@example.com')throw new Error('Payload de envío incorrecto');
+    if(body.quoteId!==id||body.recipient!=='cliente@example.com')throw new Error('Payload de envío incorrecto');
     sendCalls++;sent=true;
     return {ok:true,status:200,json:async()=>({ok:true,sent:true,message:'Cotización enviada.'})};
   }
@@ -34,7 +34,7 @@ let button=window.document.querySelector('[data-quote-email]');
 if(!button)throw new Error('No se agregó el botón Enviar correo');
 if(button.textContent!=='Enviar correo')throw new Error('Etiqueta inicial incorrecta: '+button.textContent);
 const meta=window.document.querySelector('.quote-email-meta');
-if(!meta||!meta.textContent.includes('cliente@example.com'))throw new Error(`No se mostró el correo del cliente | meta=${JSON.stringify(meta?.textContent||'')} markup=${JSON.stringify(meta?.dataset?.mailMarkup||'')} listCalls=${listCalls} html=${JSON.stringify(window.document.getElementById('quoteList').innerHTML)}`);
+if(!meta||!meta.textContent.includes('cliente@example.com'))throw new Error(`No se mostró el correo del cliente | meta=${JSON.stringify(meta?.textContent||'')} listCalls=${listCalls}`);
 button.click();
 await new Promise(r=>setTimeout(r,240));
 button=window.document.querySelector('[data-quote-email]');
