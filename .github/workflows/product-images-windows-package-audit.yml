@@ -4,6 +4,7 @@ on:
     branches: [feature/truper-product-images]
     paths:
       - .github/workflows/product-images-windows-package-audit.yml
+      - .github/workflows/windows-safe-014-build.yml
       - product-images-module.js
       - quotes-module.js
       - index.html
@@ -24,14 +25,6 @@ jobs:
           test -f .audit/desktop/package.json
           test -f .audit/desktop/scripts/sync-web.mjs
           cp index.html quotes-module.js product-images-module.js .audit/
-      - name: Inspect sync-web contract
-        working-directory: .audit/desktop
-        shell: bash
-        run: |
-          set -euo pipefail
-          node -e "const p=require('./package.json'); if(!p.scripts?.['sync-web']) throw new Error('Falta script sync-web'); console.log(p.scripts['sync-web'])"
-          echo '--- scripts/sync-web.mjs ---'
-          cat scripts/sync-web.mjs
       - name: Run same web synchronization used by Windows build
         working-directory: .audit/desktop
         shell: bash
@@ -39,14 +32,22 @@ jobs:
           set -euo pipefail
           npm install --ignore-scripts --no-audit --no-fund
           npm run sync-web
+      - name: Mirror external module copy from Windows build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .audit/quotes-module.js .audit/desktop/dist/quotes-module.js
+          cp .audit/product-images-module.js .audit/desktop/dist/product-images-module.js
       - name: Assert external web modules are packaged in dist
         working-directory: .audit/desktop
         shell: bash
         run: |
           set -euo pipefail
           test -f dist/index.html
-          test -f dist/quotes-module.js
-          test -f dist/product-images-module.js
+          test -s dist/quotes-module.js
+          test -s dist/product-images-module.js
+          node --check dist/quotes-module.js
+          node --check dist/product-images-module.js
           grep -Fq '<script src="quotes-module.js?v=1"></script>' dist/index.html
           grep -Fq '<script src="product-images-module.js?v=1"></script>' dist/index.html
           echo 'OK: index, cotizaciones e imágenes están en desktop/dist.'
