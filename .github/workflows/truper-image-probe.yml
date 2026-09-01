@@ -1,0 +1,53 @@
+name: Truper image endpoint probe
+on:
+  push:
+    branches: [feature/truper-product-images]
+    paths: ['.github/workflows/truper-image-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests beautifulsoup4
+      - name: Probe official Truper pages
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests, re
+          from bs4 import BeautifulSoup
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 FacturaRapida/1.0'
+          for code in ['16711','22636','46122']:
+              print('\n=== CODE',code,'===')
+              u='https://www.truper.com/CatVigente/buscador?palabra='+code
+              r=s.get(u,timeout=30); print('search',r.status_code,r.url,len(r.text))
+              soup=BeautifulSoup(r.text,'html.parser')
+              links=[]
+              for a in soup.find_all('a',href=True):
+                  h=a['href']
+                  if 'ficha_tecnica' in h or 'BancoContenido' in h or 'banco-contenido' in h:
+                      links.append(h)
+              print('candidate links',links[:20])
+              ficha=next((h for h in links if 'ficha_tecnica' in h and ('code='+code in h or code in h)),None)
+              if ficha:
+                  ficha=requests.compat.urljoin(r.url,ficha)
+                  fr=s.get(ficha,timeout=30); print('ficha',fr.status_code,fr.url,len(fr.text))
+                  fs=BeautifulSoup(fr.text,'html.parser')
+                  bank=[]
+                  for a in fs.find_all('a',href=True):
+                      h=a['href']
+                      if 'BancoContenido' in h or 'banco-contenido' in h:
+                          bank.append(requests.compat.urljoin(fr.url,h))
+                  print('bank links',bank[:10])
+                  if bank:
+                      br=s.get(bank[0],timeout=30,allow_redirects=True); print('bank',br.status_code,br.url,len(br.text))
+                      bs=BeautifulSoup(br.text,'html.parser')
+                      imgs=[requests.compat.urljoin(br.url,i.get('src')) for i in bs.find_all('img') if i.get('src')]
+                      hrefs=[requests.compat.urljoin(br.url,a['href']) for a in bs.find_all('a',href=True)]
+                      print('imgs',imgs[:30])
+                      print('download-ish hrefs',[h for h in hrefs if re.search(r'(?i)(download|descarga|foto|image|jpg|jpeg|png|webp)',h)][:30])
+          PY
