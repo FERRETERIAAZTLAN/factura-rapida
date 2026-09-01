@@ -24,7 +24,7 @@ assert(window.document.documentElement.dataset.solrakPosWorkspace==='1','Ventas 
 assert(window.document.querySelector('#tab-pos aside.summary>.frTicketBar'),'Los tickets no pasaron al panel derecho');
 assert(window.document.getElementById('posResults').textContent.includes('Escanea un código'),'La búsqueda vacía sigue llenando la pantalla');
 assert(!/fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|finkok/i.test(workspace),'La capa visual invadió red, ventas o CFDI');
-assert(pos.includes("posApi('completeSale'")&&pos.includes('payments:[payment]'),'La venta transaccional cambió');
+assert(pos.includes('posApi("completeSale"')&&pos.includes('payments,'),'La venta transaccional cambió');
 window.switchTab('factura');window.SOLRAKPOSWorkspaceV0165.updateMode();
 assert(!window.document.documentElement.dataset.solrakPosWorkspace,'El modo caja afectó otras secciones');
 
