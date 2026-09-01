@@ -34,7 +34,7 @@ let button=window.document.querySelector('[data-quote-email]');
 if(!button)throw new Error('No se agregó el botón Enviar correo');
 if(button.textContent!=='Enviar correo')throw new Error('Etiqueta inicial incorrecta: '+button.textContent);
 const meta=window.document.querySelector('.quote-email-meta');
-if(!meta||!meta.textContent.includes('cliente@example.com'))throw new Error('No se mostró el correo del cliente');
+if(!meta||!meta.textContent.includes('cliente@example.com'))throw new Error(`No se mostró el correo del cliente | meta=${JSON.stringify(meta?.textContent||'')} markup=${JSON.stringify(meta?.dataset?.mailMarkup||'')} listCalls=${listCalls} html=${JSON.stringify(window.document.getElementById('quoteList').innerHTML)}`);
 button.click();
 await new Promise(r=>setTimeout(r,240));
 button=window.document.querySelector('[data-quote-email]');
