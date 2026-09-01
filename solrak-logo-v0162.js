@@ -33,7 +33,7 @@ function mountSplash(){
  const close=()=>{if(!x.isConnected)return;x.classList.add('out');setTimeout(()=>x.remove(),240)};
  setTimeout(close,620);window.addEventListener('load',()=>setTimeout(close,120),{once:true});
 }
-function normalizeTitle(){document.title=String(document.title||'').replace(/Factura Rápida|Factura Rapida|Solrak/g,'SOLRAK')||'SOLRAK'}
+function normalizeTitle(){const current=String(document.title||'');const next=current.replace(/Factura Rápida|Factura Rapida|Solrak/g,'SOLRAK')||'SOLRAK';if(current!==next)document.title=next}
 function mount(){style();mountNav();mountLogin();normalizeTitle()}
 
 style();mountSplash();mount();
