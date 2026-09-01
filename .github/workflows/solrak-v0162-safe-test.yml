@@ -16,7 +16,7 @@ env:
 jobs:
   safe-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,22 +28,33 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Sintaxis y pruebas aisladas
+      - name: Sintaxis logo y pruebas aisladas
         shell: bash
         run: |
           set -euo pipefail
-          npm install --no-save --no-audit --no-fund jsdom@25
+          npm install --no-save --no-audit --no-fund jsdom@25 sharp@0.33.5
           node --check solrak-desktop-v0162.js
+          node --check solrak-logo-v0162.js
           node --check scripts/apply-solrak-brand-v0162.mjs
           node tests/pos-module-smoke.mjs
           node tests/solrak-desktop-v0162-smoke.mjs
-          if grep -Eiq 'cfdi-api|finkok' solrak-desktop-v0162.js; then
-            echo 'El rediseño no debe tocar CFDI/Finkok' >&2
+          node tests/solrak-logo-v0162-smoke.mjs
+          test -s branding/solrak-icon.svg
+          node - <<'NODE'
+          const fs=require('fs'),sharp=require('sharp');
+          const svg=fs.readFileSync('branding/solrak-icon.svg');
+          await sharp(svg).resize(1024,1024).png().toFile('branding/solrak-icon-1024.png');
+          const m=await sharp('branding/solrak-icon-1024.png').metadata();
+          if(m.width!==1024||m.height!==1024)throw new Error('Logo rasterizado con tamaño incorrecto');
+          console.log('SOLRAK_LOGO_SOURCE_OK 1024x1024');
+          NODE
+          if grep -Eiq 'cfdi-api|finkok' solrak-desktop-v0162.js solrak-logo-v0162.js; then
+            echo 'El rediseño/logo no debe tocar CFDI/Finkok' >&2
             exit 1
           fi
           echo 'SOLRAK_V0162_UNIT_SAFE_OK'
 
-      - name: Reconstruir FIX1 validada
+      - name: Reconstruir FIX1 validada y generar iconos Tauri
         shell: bash
         run: |
           set -euo pipefail
@@ -55,6 +66,13 @@ jobs:
           cd desktop
           npm install --no-audit --no-fund
           node scripts/set-version.mjs 0.1.62
+          npm run tauri -- icon ../branding/solrak-icon-1024.png
+          cd ..
+          test -s desktop/src-tauri/icons/icon.ico
+          test -s desktop/src-tauri/icons/32x32.png
+          test -s desktop/src-tauri/icons/128x128.png
+          test -s desktop/src-tauri/icons/128x128@2x.png
+          echo 'SOLRAK_TAURI_ICONS_OK'
 
       - name: Sincronizar UI productiva sin tocar CFDI
         shell: bash
@@ -70,11 +88,11 @@ jobs:
           node scripts/clean-webview-startup-v0148.mjs desktop/dist/index.html
           node scripts/fix-facturar-mutation-v0148.mjs desktop/dist/index.html
 
-      - name: Integrar módulos estables y shell SOLRAK
+      - name: Integrar módulos estables shell y logo SOLRAK
         shell: bash
         run: |
           set -euo pipefail
-          for f in quotes-module.js quotes-email-module.js product-images-module.js pos-module.js solrak-desktop-v0162.js; do
+          for f in quotes-module.js quotes-email-module.js product-images-module.js pos-module.js solrak-desktop-v0162.js solrak-logo-v0162.js; do
             cp "$f" "desktop/dist/$f"
             node --check "desktop/dist/$f"
           done
@@ -82,16 +100,18 @@ jobs:
           const fs=require('fs');
           const p='desktop/dist/index.html';
           let h=fs.readFileSync(p,'utf8');
-          const tag='<script src="solrak-desktop-v0162.js?v=1"></script>';
-          if(!h.includes(tag))h=h.replace('</body>',tag+'\n</body>');
+          const tags=['<script src="solrak-desktop-v0162.js?v=1"></script>','<script src="solrak-logo-v0162.js?v=1"></script>'];
+          for(const tag of tags)if(!h.includes(tag))h=h.replace('</body>',tag+'\n</body>');
           fs.writeFileSync(p,h);
           NODE
           node scripts/apply-solrak-brand-v0162.mjs desktop
           node tests/solrak-brand-v0162-smoke.mjs desktop
           grep -q 'solrak-desktop-v0162.js?v=1' desktop/dist/index.html
+          grep -q 'solrak-logo-v0162.js?v=1' desktop/dist/index.html
           grep -q 'SOLRAK' desktop/dist/index.html
+          grep -q 'solrakLogoSvg' desktop/dist/solrak-logo-v0162.js
           if grep -Fq 'Solrak' desktop/dist/index.html; then exit 1; fi
-          echo 'SOLRAK_V0162_PACKAGED_UI_OK'
+          echo 'SOLRAK_V0162_PACKAGED_UI_LOGO_OK'
 
       - name: Backend de imágenes productivo read-only health
         shell: bash
@@ -122,5 +142,8 @@ jobs:
           const r=fs.readFileSync('desktop/src-tauri/src/main.rs','utf8');
           if(!r.includes('https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json'))throw new Error('updater cambió');
           if(!r.includes('factura-rapida-startup.log'))throw new Error('diagnóstico técnico cambió');
-          console.log('SOLRAK_V0162_COMPATIBILITY_OK');
+          for(const f of ['icon.ico','32x32.png','128x128.png','128x128@2x.png']){
+            const p='desktop/src-tauri/icons/'+f;if(!fs.existsSync(p)||fs.statSync(p).size<500)throw new Error('Icono faltante o vacío '+f);
+          }
+          console.log('SOLRAK_V0162_COMPATIBILITY_LOGO_OK');
           NODE
