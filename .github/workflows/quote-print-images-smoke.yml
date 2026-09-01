@@ -1,0 +1,43 @@
+name: Quote Print Images Smoke
+
+on:
+  push:
+    branches: [fix/quote-pdf-images]
+    paths:
+      - 'product-images-module.js'
+      - '.github/workflows/quote-print-images-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxis
+        run: node --check product-images-module.js
+      - name: Contrato de impresión con imágenes
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const s=fs.readFileSync('product-images-module.js','utf8');
+          const required=[
+            'data-qact="print"',
+            "action:'listQuotes'",
+            'printQuoteWithImages',
+            'Código:',
+            'Cód. barras:',
+            'imageFor(item.id)',
+            'window.print()',
+            'Foto',
+            'Producto'
+          ];
+          for(const marker of required){if(!s.includes(marker))throw new Error('Falta marcador: '+marker)}
+          if(!s.includes("addEventListener('click'"))throw new Error('Falta interceptor de click');
+          if(!s.includes('stopImmediatePropagation'))throw new Error('No se aísla el PDF anterior');
+          console.log('QUOTE_PRINT_IMAGES_SMOKE_OK');
+          NODE
