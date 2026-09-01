@@ -129,7 +129,7 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $h=Get-Content desktop/dist/index.html -Raw
-          $m=[regex]::Match($h,"const\s+ANON_KEY\s*=\s*['\"]([^'\"]+)['\"]")
+          $m=[regex]::Match($h,'const\s+ANON_KEY\s*=\s*[''"]([^''"]+)[''"]')
           if(-not $m.Success){throw 'No se pudo leer ANON_KEY pública para health check'}
           $anon=$m.Groups[1].Value
           $headers=@{Authorization="Bearer $anon";apikey=$anon}
