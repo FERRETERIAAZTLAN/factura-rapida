@@ -1,7 +1,15 @@
 name: Product images Windows package audit
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/product-images-windows-package-audit.yml
+      - .github/workflows/windows-safe-014-build.yml
+      - product-images-module.js
+      - quotes-module.js
+      - index.html
   push:
-    branches: [feature/truper-product-images]
+    branches: [main]
     paths:
       - .github/workflows/product-images-windows-package-audit.yml
       - .github/workflows/windows-safe-014-build.yml
