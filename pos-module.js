@@ -601,7 +601,23 @@
     }
     syncTicket();
     const chargedTicket = currentTicket(),
-      items = posCart.map((x) => ({ product_id: x.id, qty: Number(x.qty) }));
+      items = posCart.map((x) => ({ product_id: x.id, qty: Number(x.qty) })),
+      receiptItems = posCart.map((x) => {
+        const amounts = lineAmounts(x);
+        return {
+          productId: x.id,
+          code: x.code || "",
+          name: x.name || "Producto",
+          qty: Number(x.qty) || 0,
+          unit: x.unit || "Pieza",
+          unitPrice: Number(x.price) || 0,
+          subtotal: amounts.base,
+          tax: amounts.tax,
+          total: amounts.total,
+        };
+      }),
+      receiptCustomer = clients.find((c) => c.id === chargedTicket.clientId),
+      receiptNote = byId("posSaleNote")?.value.trim() || "";
     chargeLock = true;
     busy(true);
     if (byId("posConfirmCharge")) byId("posConfirmCharge").disabled = true;
@@ -621,6 +637,25 @@
       resetPayment();
       byId("posReceipt").innerHTML =
         `<div class="frPosReceipt"><strong>Venta #${String(r.sale_number).padStart(6, "0")} cobrada</strong><div>Total ${mx(r.total)}${change ? ` · Cambio ${mx(change)}` : ""}</div></div>`;
+      document.dispatchEvent(
+        new CustomEvent("solrak:pos-sale-complete", {
+          detail: {
+            saleId: r.sale_id || r.id || null,
+            saleNumber: r.sale_number,
+            ticketNumber: chargedTicket.id,
+            createdAt: r.created_at || new Date().toISOString(),
+            customerName: receiptCustomer?.name || "Público general",
+            customerRfc: receiptCustomer?.rfc || "",
+            items: receiptItems,
+            payments,
+            subtotal: Number(r.subtotal ?? t.base),
+            tax: Number(r.iva ?? r.tax ?? t.tax),
+            total: Number(r.total ?? t.total),
+            change,
+            note: receiptNote,
+          },
+        }),
+      );
       await loadAll();
       await refreshPos();
       renderTickets();

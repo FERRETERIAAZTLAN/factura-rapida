@@ -1,0 +1,103 @@
+name: SOLRAK v0.1.69 Suma Pro Tickets Safe Test
+
+on:
+  push:
+    branches: [feature/v0.1.69-sumapro-tickets]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias de prueba
+        run: npm install --no-save --no-audit --no-fund jsdom@25
+
+      - name: Validar tickets, navegación y regresiones
+        run: |
+          set -euo pipefail
+          node --check solrak-sumapro-tickets-v0169.js
+          node --check pos-module.js
+          node --check tests/solrak-sumapro-tickets-v0169-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+          node tests/pos-module-smoke.mjs
+          node tests/solrak-simple-ui-v0168-smoke.mjs
+          node tests/solrak-pos-clear-footer-v0167-smoke.mjs
+          node tests/solrak-professional-pos-v0166-smoke.mjs
+          node tests/solrak-pos-workspace-v0165-smoke.mjs
+          node tests/pos-suma-v0163-smoke.mjs
+          node tests/solrak-v0164-cash-report-contract.mjs
+          node tests/solrak-desktop-v0163-smoke.mjs
+          node tests/solrak-desktop-v0162-smoke.mjs
+          node tests/quote-email-ui-smoke.mjs
+
+      - name: Confirmar aislamiento y contrato de impresión
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q -- '--solrak-simple-side:238px' solrak-sumapro-tickets-v0169.js
+          grep -q 'data-solrak-sumapro-tickets' solrak-sumapro-tickets-v0169.js
+          grep -q 'solrak:pos-sale-complete' pos-module.js
+          grep -q 'Predeterminada de Windows' solrak-sumapro-tickets-v0169.js
+          grep -q '58 mm' solrak-sumapro-tickets-v0169.js
+          grep -q '80 mm' solrak-sumapro-tickets-v0169.js
+          grep -q 'Imprimir ticket de prueba' solrak-sumapro-tickets-v0169.js
+          grep -q 'Imprimir ticket' solrak-sumapro-tickets-v0169.js
+          if grep -Eiq 'fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|supabase' solrak-sumapro-tickets-v0169.js; then
+            echo 'La capa v0.1.69 invadió red, cobro, Supabase o CFDI' >&2
+            exit 1
+          fi
+          if grep -Eiq 'cfdi-api|finkok' pos-module.js; then
+            echo 'El POS no debe tocar CFDI/Finkok' >&2
+            exit 1
+          fi
+          echo 'SOLRAK_V0169_SUMAPRO_TICKETS_SAFE_OK'
+
+      - name: Simular integración al paquete Windows
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_dir="$(mktemp -d)"
+          cp index.html "$package_dir/index.html"
+          for file in quotes-module.js quotes-email-module.js product-images-module.js pos-module.js solrak-desktop-v0162.js solrak-logo-v0162.js solrak-desktop-v0163.js solrak-sales-report-v0163.js solrak-pos-workspace-v0165.js solrak-professional-pos-v0166.js solrak-pos-clear-footer-v0167.js solrak-simple-ui-v0168.js solrak-sumapro-tickets-v0169.js; do
+            cp "$file" "$package_dir/$file"
+            node --check "$package_dir/$file"
+          done
+          PACKAGE_DIR="$package_dir" node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const root=process.env.PACKAGE_DIR;
+          const file=root+'/index.html';
+          let html=fs.readFileSync(file,'utf8');
+          const tags=[
+            '<script src="quotes-email-module.js?v=1"></script>',
+            '<script src="solrak-desktop-v0162.js?v=1"></script>',
+            '<script src="solrak-logo-v0162.js?v=1"></script>',
+            '<script src="solrak-desktop-v0163.js?v=1"></script>',
+            '<script src="solrak-sales-report-v0163.js?v=1"></script>',
+            '<script src="solrak-pos-workspace-v0165.js?v=1"></script>',
+            '<script src="solrak-professional-pos-v0166.js?v=1"></script>',
+            '<script src="solrak-pos-clear-footer-v0167.js?v=1"></script>',
+            '<script src="solrak-simple-ui-v0168.js?v=1"></script>',
+            '<script src="solrak-sumapro-tickets-v0169.js?v=1"></script>'
+          ];
+          for(const tag of tags)if(!html.includes(tag))html=html.replace('</body>',tag+'\n</body>');
+          fs.writeFileSync(file,html);
+          const final=fs.readFileSync(file,'utf8');
+          for(const tag of tags)if(!final.includes(tag))throw new Error('Falta '+tag);
+          if(final.indexOf('solrak-sumapro-tickets-v0169.js')<final.indexOf('solrak-simple-ui-v0168.js'))throw new Error('Orden de carga v0.1.69 incorrecto');
+          NODE
+          grep -q 'solrak-sumapro-tickets-v0169.js?v=1' "$package_dir/index.html"
+          echo 'SOLRAK_V0169_WINDOWS_PACKAGE_SIMULATION_OK'
