@@ -1,7 +1,12 @@
 name: Product images UI smoke
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'product-images-module.js'
+      - '.github/workflows/product-images-ui-smoke.yml'
   push:
-    branches: [feature/truper-product-images]
+    branches: [main]
     paths:
       - 'product-images-module.js'
       - '.github/workflows/product-images-ui-smoke.yml'
