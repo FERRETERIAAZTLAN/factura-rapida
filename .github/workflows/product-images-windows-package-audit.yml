@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/product-images-windows-package-audit.yml
       - product-images-module.js
+      - quotes-module.js
       - index.html
 permissions:
   contents: read
@@ -13,35 +14,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Expand desktop source
+      - name: Expand desktop source like Windows build
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf desktop
-          mkdir desktop
-          unzip -q Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip -d desktop
-          test -f desktop/package.json
+          rm -rf .audit
+          mkdir .audit
+          unzip -q Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip -d .audit
+          test -f .audit/desktop/package.json
+          test -f .audit/desktop/scripts/sync-web.mjs
+          cp index.html quotes-module.js product-images-module.js .audit/
       - name: Inspect sync-web contract
-        working-directory: desktop
+        working-directory: .audit/desktop
         shell: bash
         run: |
           set -euo pipefail
           node -e "const p=require('./package.json'); if(!p.scripts?.['sync-web']) throw new Error('Falta script sync-web'); console.log(p.scripts['sync-web'])"
+          echo '--- scripts/sync-web.mjs ---'
+          cat scripts/sync-web.mjs
       - name: Run same web synchronization used by Windows build
-        working-directory: desktop
+        working-directory: .audit/desktop
         shell: bash
         run: |
           set -euo pipefail
-          npm install --ignore-scripts
+          npm install --ignore-scripts --no-audit --no-fund
           npm run sync-web
-      - name: Assert all external web modules are packaged
-        working-directory: desktop
+      - name: Assert external web modules are packaged in dist
+        working-directory: .audit/desktop
         shell: bash
         run: |
           set -euo pipefail
-          echo 'Buscando archivos sincronizados:'
-          find . -type f \( -name 'index.html' -o -name 'quotes-module.js' -o -name 'product-images-module.js' \) -print
-          test "$(find . -type f -name 'index.html' | wc -l)" -ge 1
-          test "$(find . -type f -name 'quotes-module.js' | wc -l)" -ge 1
-          test "$(find . -type f -name 'product-images-module.js' | wc -l)" -ge 1
-          echo 'OK: index, cotizaciones e imágenes están en el paquete de escritorio.'
+          test -f dist/index.html
+          test -f dist/quotes-module.js
+          test -f dist/product-images-module.js
+          grep -Fq '<script src="quotes-module.js?v=1"></script>' dist/index.html
+          grep -Fq '<script src="product-images-module.js?v=1"></script>' dist/index.html
+          echo 'OK: index, cotizaciones e imágenes están en desktop/dist.'
