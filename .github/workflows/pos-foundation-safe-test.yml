@@ -50,7 +50,7 @@ jobs:
           $qe=Get-Content quotes-email-module.js -Raw
           foreach($m in @('pos-module.js?v=1','data-fr-pos-loader')){if(-not $qe.Contains($m)){throw "Loader POS faltante: $m"}}
           $pm=Get-Content pos-module.js -Raw
-          foreach($m in @('Punto de venta','Proveedores','completeSale','openCash','closeCash','7501234567890')){
+          foreach($m in @('Punto de venta','Proveedores','completeSale','openCash','closeCash','posSearch','PRODUCT_IMAGE_BASE')){
             if(-not $pm.Contains($m)){throw "Contrato UI POS incompleto: $m"}
           }
           Write-Host 'POS_STATIC_AND_UI_SMOKE_OK_NO_REAL_SALE'
