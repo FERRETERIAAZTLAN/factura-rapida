@@ -1,0 +1,98 @@
+name: Solrak Brand Safe Test
+
+on:
+  push:
+    branches: [feature/solrak-brand-safe]
+    paths:
+      - 'scripts/apply-solrak-brand-v0161.mjs'
+      - 'tests/solrak-brand-smoke.mjs'
+      - '.github/workflows/solrak-brand-safe-test.yml'
+  pull_request:
+    paths:
+      - 'scripts/apply-solrak-brand-v0161.mjs'
+      - 'tests/solrak-brand-smoke.mjs'
+      - '.github/workflows/solrak-brand-safe-test.yml'
+
+permissions:
+  contents: read
+
+env:
+  FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+
+jobs:
+  brand-safe:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Sintaxis y pruebas base
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          npm install --no-save --no-audit --no-fund jsdom@25
+          node --check scripts/apply-solrak-brand-v0161.mjs
+          node --check tests/solrak-brand-smoke.mjs
+          node --check pos-module.js
+          node tests/pos-module-smoke.mjs
+          Write-Host 'SOLRAK_PREFLIGHT_OK'
+
+      - name: Reconstruir FIX1 validada
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cmd /c "git show $env:FR_FIX1_COMMIT`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1'}
+          $sha=(Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne '144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134'){throw "FIX1 hash inesperado $sha"}
+          Expand-Archive FIX1.zip . -Force
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          Push-Location desktop
+          npm install --no-audit --no-fund
+          Pop-Location
+
+      - name: Sincronizar UI y módulos estables
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile production-source.html -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -TimeoutSec 30
+          if((Get-Item production-source.html).Length -lt 10000){throw 'UI productiva incompleta'}
+          $env:FR_WEB_SOURCE=(Resolve-Path production-source.html).Path
+          Push-Location desktop
+          npm run sync-web
+          Pop-Location
+          node scripts/sanitize-production-ui-v0142.mjs desktop/dist/index.html
+          node scripts/clean-webview-startup-v0148.mjs desktop/dist/index.html
+          node scripts/fix-facturar-mutation-v0148.mjs desktop/dist/index.html
+          foreach($f in @('quotes-module.js','quotes-email-module.js','product-images-module.js','pos-module.js')){
+            Copy-Item $f "desktop/dist/$f" -Force
+            node --check "desktop/dist/$f"
+          }
+          $p='desktop/dist/index.html';$html=Get-Content $p -Raw
+          foreach($tag in @('<script src="quotes-module.js?v=1"></script>','<script src="quotes-email-module.js?v=1"></script>','<script src="product-images-module.js?v=1"></script>')){
+            if(-not $html.Contains($tag)){$html=$html.Replace('</body>',"$tag`r`n</body>")}
+          }
+          Set-Content $p $html -Encoding UTF8
+          $qe=Get-Content desktop/dist/quotes-email-module.js -Raw
+          if(-not $qe.Contains('pos-module.js?v=1')){throw 'El paquete no carga POS'}
+
+      - name: Aplicar Solrak y validar compatibilidad
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node scripts/apply-solrak-brand-v0161.mjs desktop
+          node tests/solrak-brand-smoke.mjs desktop
+          node tests/ui-login-smoke-v15.mjs desktop/dist/index.html
+          $h=Get-Content desktop/dist/index.html -Raw
+          if(-not $h.Contains('Solrak')){throw 'Solrak no quedó visible'}
+          if($h.Contains('Factura Rápida') -or $h.Contains('Factura Rapida')){throw 'Quedó marca anterior visible'}
+          Write-Host 'SOLRAK_WINDOWS_BRAND_SAFE_OK'
