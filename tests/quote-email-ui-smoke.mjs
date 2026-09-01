@@ -24,14 +24,16 @@ window.fetch=async(url,opts)=>{
 const source=await fs.readFile('quotes-email-module.js','utf8');
 window.eval(source);
 window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
-await new Promise(r=>setTimeout(r,260));
+await new Promise(r=>setTimeout(r,140));
+window.document.getElementById('quotesTabBtn').click();
+await new Promise(r=>setTimeout(r,320));
 let button=window.document.querySelector('[data-quote-email]');
 if(!button)throw new Error('No se agregó el botón Enviar correo');
 if(button.textContent!=='Enviar correo')throw new Error('Etiqueta inicial incorrecta: '+button.textContent);
 const meta=window.document.querySelector('.quote-email-meta');
 if(!meta||!meta.textContent.includes('cliente@example.com'))throw new Error('No se mostró el correo del cliente');
 button.click();
-await new Promise(r=>setTimeout(r,120));
+await new Promise(r=>setTimeout(r,180));
 button=window.document.querySelector('[data-quote-email]');
 if(sendCalls!==1)throw new Error('El envío no se ejecutó exactamente una vez');
 if(button.textContent!=='Reenviar correo')throw new Error('No cambió a Reenviar correo');
