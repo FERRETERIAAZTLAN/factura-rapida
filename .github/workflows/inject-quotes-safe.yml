@@ -1,0 +1,51 @@
+name: Inject quotations module (safe branch)
+
+on:
+  push:
+    branches:
+      - feature/cotizaciones-safe
+    paths:
+      - quotes-module.js
+      - .github/workflows/inject-quotes-safe.yml
+
+permissions:
+  contents: write
+
+jobs:
+  inject:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/cotizaciones-safe
+          fetch-depth: 0
+
+      - name: Inject module tag without changing application core
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          tag = '<script src="quotes-module.js?v=1"></script>'
+          if tag not in s:
+              if '</body>' not in s:
+                  raise SystemExit('index.html has no </body> tag')
+              s = s.replace('</body>', tag + '\n</body>', 1)
+              p.write_text(s, encoding='utf-8')
+          PY
+          grep -F 'quotes-module.js?v=1' index.html
+
+      - name: Commit branch-only integration
+        shell: bash
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'Already injected'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'feat: enable quotations module on safe branch'
+          git push origin HEAD:feature/cotizaciones-safe
