@@ -1,0 +1,38 @@
+name: Truper image import smoke
+on:
+  push:
+    branches: [feature/truper-product-images]
+    paths: ['.github/workflows/truper-image-import-smoke.yml']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  import-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get GitHub OIDC token
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN_JSON=$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=factura-rapida-truper-import")
+          OIDC=$(printf '%s' "$TOKEN_JSON" | jq -r '.value')
+          test -n "$OIDC" && test "$OIDC" != "null"
+          echo "OIDC_TOKEN=$OIDC" >> "$GITHUB_ENV"
+      - name: Import 3 official Truper images
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/truper-image-import-api'
+          RESP=$(curl -fsSL -X POST "$URL" \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data '{"action":"importBatch","limit":3}')
+          printf '%s\n' "$RESP" | jq .
+          test "$(printf '%s' "$RESP" | jq -r '.ok')" = "true"
+          test "$(printf '%s' "$RESP" | jq -r '.selected')" = "3"
+          UPLOADED=$(printf '%s' "$RESP" | jq -r '.uploaded')
+          if [ "$UPLOADED" -lt 1 ]; then
+            echo 'Ninguna imagen se pudo subir en el smoke test.' >&2
+            exit 1
+          fi
