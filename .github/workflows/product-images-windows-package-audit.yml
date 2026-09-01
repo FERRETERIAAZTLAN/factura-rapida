@@ -1,0 +1,61 @@
+name: Product images Windows package audit
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/product-images-windows-package-audit.yml
+      - .github/workflows/windows-safe-014-build.yml
+      - product-images-module.js
+      - quotes-module.js
+      - index.html
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/product-images-windows-package-audit.yml
+      - .github/workflows/windows-safe-014-build.yml
+      - product-images-module.js
+      - quotes-module.js
+      - index.html
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand desktop source like Windows build
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .audit
+          mkdir .audit
+          unzip -q Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip -d .audit
+          test -f .audit/desktop/package.json
+          test -f .audit/desktop/scripts/sync-web.mjs
+          cp index.html quotes-module.js product-images-module.js .audit/
+      - name: Run same web synchronization used by Windows build
+        working-directory: .audit/desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run sync-web
+      - name: Mirror external module copy from Windows build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .audit/quotes-module.js .audit/desktop/dist/quotes-module.js
+          cp .audit/product-images-module.js .audit/desktop/dist/product-images-module.js
+      - name: Assert external web modules are packaged in dist
+        working-directory: .audit/desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/index.html
+          test -s dist/quotes-module.js
+          test -s dist/product-images-module.js
+          node --check dist/quotes-module.js
+          node --check dist/product-images-module.js
+          grep -Fq '<script src="quotes-module.js?v=1"></script>' dist/index.html
+          grep -Fq '<script src="product-images-module.js?v=1"></script>' dist/index.html
+          echo 'OK: index, cotizaciones e imágenes están en desktop/dist.'
