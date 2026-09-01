@@ -26,6 +26,16 @@ function replaceVisibleBrand(text) {
   return out;
 }
 
+async function replaceOptional(path) {
+  try {
+    const original = await readFile(path, 'utf8');
+    const updated = replaceVisibleBrand(original);
+    if (updated !== original) await writeFile(path, updated, 'utf8');
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+}
+
 const tauri = JSON.parse(await readFile(tauriPath, 'utf8'));
 if (tauri.identifier !== technicalIdentifier) {
   throw new Error(`Identifier técnico inesperado: ${tauri.identifier}`);
@@ -45,15 +55,21 @@ if (/<title>\s*<\/title>/i.test(html)) {
 }
 await writeFile(htmlPath, html, 'utf8');
 
-// Solo se sustituyen textos visibles del puente nativo. Los identificadores,
-// nombres técnicos, binario, canal de diagnóstico y endpoint del updater no cambian.
-try {
-  let sync = await readFile(syncPath, 'utf8');
-  sync = replaceVisibleBrand(sync);
-  await writeFile(syncPath, sync, 'utf8');
-} catch (error) {
-  if (error?.code !== 'ENOENT') throw error;
+// Sustituir únicamente textos visibles también en módulos que se copian al paquete.
+// Los nombres técnicos de archivo/namespace se preservan para compatibilidad.
+for (const file of [
+  'quotes-module.js',
+  'quotes-email-module.js',
+  'product-images-module.js',
+  'pos-module.js',
+  'solrak-desktop-v0162.js',
+]) {
+  await replaceOptional(`${desktop}/dist/${file}`);
 }
+
+// El puente nativo puede contener mensajes visibles del actualizador. Se cambia la
+// marca mostrada, no el endpoint, comandos, storage ni identificadores técnicos.
+await replaceOptional(syncPath);
 
 const rust = await readFile(rustPath, 'utf8');
 if (!rust.includes(updaterEndpoint)) throw new Error('Cambió el endpoint técnico del updater');
