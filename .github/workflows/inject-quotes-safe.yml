@@ -37,6 +37,25 @@ jobs:
           PY
           grep -F 'quotes-module.js?v=1' index.html
 
+      - name: Verify quotations JavaScript syntax
+        shell: bash
+        run: node --check quotes-module.js
+
+      - name: Prove application core is unchanged
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          main = subprocess.check_output(['git','show','origin/main:index.html']).decode('utf-8')
+          branch = Path('index.html').read_text(encoding='utf-8')
+          tag = '<script src="quotes-module.js?v=1"></script>'
+          expected = main.replace('</body>', tag + '\n</body>', 1)
+          if branch != expected:
+              raise SystemExit('Safety check failed: index.html differs from main beyond the quotations script tag')
+          print('Safety check passed: only quotations script tag differs from main index.html')
+          PY
+
       - name: Commit branch-only integration
         shell: bash
         run: |
