@@ -27,25 +27,30 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Pruebas aisladas sin escrituras
+      - name: Pruebas aisladas sin escrituras reales
         shell: bash
         run: |
           set -euo pipefail
           npm install --no-save --no-audit --no-fund jsdom@25
+          node --check pos-module.js
           node --check solrak-desktop-v0163.js
-          node tests/pos-module-smoke.mjs
+          node tests/pos-suma-v0163-smoke.mjs
           node tests/solrak-desktop-v0162-smoke.mjs
           node tests/solrak-logo-v0162-smoke.mjs
           node tests/solrak-desktop-v0163-smoke.mjs
+          if grep -Eiq 'cfdi-api|finkok' pos-module.js; then
+            echo 'El POS v0.1.63 no debe tocar CFDI/Finkok' >&2
+            exit 1
+          fi
           if grep -Eiq 'cfdi-api|finkok|completeSale|saveProduct' solrak-desktop-v0163.js; then
-            echo 'La capa v0.1.63 debe ser exclusivamente visual' >&2
+            echo 'La capa visual v0.1.63 invadió lógica productiva' >&2
             exit 1
           fi
           if grep -Eiq '\bfetch\s*\(|XMLHttpRequest' solrak-desktop-v0163.js; then
-            echo 'La capa v0.1.63 no debe hacer red' >&2
+            echo 'La capa visual v0.1.63 no debe hacer red' >&2
             exit 1
           fi
-          echo 'SOLRAK_V0163_VISUAL_ONLY_OK'
+          echo 'SOLRAK_V0163_POS_AND_VISUAL_SAFE_OK'
 
       - name: Reconstruir FIX1 validada
         shell: bash
@@ -75,7 +80,7 @@ jobs:
           node scripts/clean-webview-startup-v0148.mjs desktop/dist/index.html
           node scripts/fix-facturar-mutation-v0148.mjs desktop/dist/index.html
 
-      - name: Empaquetar módulos estables y pulido v0.1.63
+      - name: Empaquetar módulos estables y POS v0.1.63
         shell: bash
         run: |
           set -euo pipefail
@@ -94,8 +99,10 @@ jobs:
           node tests/solrak-brand-v0162-smoke.mjs desktop
           grep -q 'solrak-desktop-v0163.js?v=1' desktop/dist/index.html
           grep -q 'SOLRAK' desktop/dist/index.html
+          grep -q 'Finalizar venta' desktop/dist/pos-module.js
+          grep -q 'MAX_TICKETS=7' desktop/dist/pos-module.js
           if grep -Fq 'Solrak' desktop/dist/index.html; then exit 1; fi
-          echo 'SOLRAK_V0163_PACKAGED_POLISH_OK'
+          echo 'SOLRAK_V0163_PACKAGED_POS_OK'
 
       - name: Auditoría final de compatibilidad
         shell: bash
@@ -109,6 +116,10 @@ jobs:
           const rust=fs.readFileSync('desktop/src-tauri/src/main.rs','utf8');
           if(!rust.includes('https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json'))throw new Error('updater cambió');
           const polish=fs.readFileSync('desktop/dist/solrak-desktop-v0163.js','utf8');
-          if(/cfdi-api|finkok|completeSale|saveProduct|\bfetch\s*\(/i.test(polish))throw new Error('v0.1.63 invadió lógica de datos');
-          console.log('SOLRAK_V0163_COMPATIBILITY_OK visualOnly=true updaterCompatible=true');
+          if(/cfdi-api|finkok|completeSale|saveProduct|\bfetch\s*\(/i.test(polish))throw new Error('v0.1.63 visual invadió lógica de datos');
+          const pos=fs.readFileSync('desktop/dist/pos-module.js','utf8');
+          if(/cfdi-api|finkok/i.test(pos))throw new Error('POS tocó CFDI/Finkok');
+          if(!pos.includes('payments:[payment]'))throw new Error('Contrato de pago cambió');
+          if(!pos.includes("posApi('completeSale'"))throw new Error('Venta atómica ausente');
+          console.log('SOLRAK_V0163_COMPATIBILITY_OK multiTicket=true paymentContractPreserved=true updaterCompatible=true');
           NODE
