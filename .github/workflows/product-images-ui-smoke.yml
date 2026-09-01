@@ -1,0 +1,58 @@
+name: Product images UI smoke
+on:
+  push:
+    branches: [feature/truper-product-images]
+    paths:
+      - 'product-images-module.js'
+      - '.github/workflows/product-images-ui-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check product-images-module.js
+      - run: npm install --no-save --no-audit --no-fund jsdom@25
+      - name: Browser-like image decoration smoke
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const {JSDOM}=require('jsdom');
+          const html=`<!doctype html><html><head></head><body>
+            <input id="inventorySearch" value="">
+            <div id="productResults"><button class="result" data-id="p1"><div><strong>Producto uno</strong></div><div class="price">$1</div></button></div>
+            <div id="quoteProductResults"><button class="result" data-qpid="p2"><div><strong>Producto dos</strong></div><div class="price">$2</div></button></div>
+            <div id="cartList"><div class="cart-item"><div class="cart-main">Uno</div><div><button data-id="p1">+</button></div><div></div></div></div>
+            <div id="quoteCartList"><div class="cart-item"><div class="cart-main">Dos</div><div><button data-id="p2">+</button></div><div></div></div></div>
+            <table><thead><tr><th>Código</th><th>Producto</th></tr></thead><tbody id="inventoryBody"><tr><td>C1</td><td>Producto uno</td></tr><tr><td>C2</td><td>Producto dos</td></tr></tbody></table>
+          </body></html>`;
+          const dom=new JSDOM(html,{url:'https://app.local/',runScripts:'outside-only',pretendToBeVisual:true});
+          const w=dom.window;
+          w.ANON_KEY='anon';
+          w.session={token:'session-token',business:{id:'b1'}};
+          w.products=[{id:'p1',code:'C1',name:'Producto uno',active:true},{id:'p2',code:'C2',name:'Producto dos',active:true}];
+          w.pMatch=(p,q)=>!q||p.name.toLowerCase().includes(q);
+          w.loadAll=async()=>{};
+          w.fetch=async()=>({ok:true,status:200,json:async()=>({ok:true,images:[
+            {id:'p1',path:'b1/p1/main.jpg',url:'https://img.local/p1.jpg'},
+            {id:'p2',path:'b1/p2/main.jpg',url:'https://img.local/p2.jpg'}
+          ]})});
+          w.eval(fs.readFileSync('product-images-module.js','utf8'));
+          setTimeout(()=>{
+            const assert=(x,m)=>{if(!x){console.error(m);process.exit(1)}};
+            assert(w.document.querySelector('#productResults .fr-product-thumb[src="https://img.local/p1.jpg"]'),'invoice search image missing');
+            assert(w.document.querySelector('#quoteProductResults .fr-product-thumb[src="https://img.local/p2.jpg"]'),'quote search image missing');
+            assert(w.document.querySelector('#cartList .fr-product-thumb'),'invoice cart image missing');
+            assert(w.document.querySelector('#quoteCartList .fr-product-thumb'),'quote cart image missing');
+            assert(w.document.querySelectorAll('#inventoryBody .fr-inventory-image-cell').length===2,'inventory image cells missing');
+            assert(w.document.querySelector('.fr-inventory-image-head'),'inventory image header missing');
+            assert(w.products[0].image_url==='https://img.local/p1.jpg','product image URL was not merged');
+            console.log('PRODUCT_IMAGES_UI_SMOKE_OK');
+            process.exit(0);
+          },900);
+          NODE
