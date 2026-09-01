@@ -1,0 +1,23 @@
+name: Quote Email UI Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/quote-email-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-audit --no-fund jsdom@25
+      - run: node --check quotes-email-module.js
+      - run: node tests/quote-email-ui-smoke.mjs
