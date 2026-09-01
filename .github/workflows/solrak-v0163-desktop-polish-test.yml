@@ -34,23 +34,25 @@ jobs:
           npm install --no-save --no-audit --no-fund jsdom@25
           node --check pos-module.js
           node --check solrak-desktop-v0163.js
+          node --check solrak-sales-report-v0163.js
           node tests/pos-suma-v0163-smoke.mjs
+          node tests/solrak-sales-report-v0163-smoke.mjs
           node tests/solrak-desktop-v0162-smoke.mjs
           node tests/solrak-logo-v0162-smoke.mjs
           node tests/solrak-desktop-v0163-smoke.mjs
-          if grep -Eiq 'cfdi-api|finkok' pos-module.js; then
-            echo 'El POS v0.1.63 no debe tocar CFDI/Finkok' >&2
+          if grep -Eiq 'cfdi-api|finkok' pos-module.js solrak-sales-report-v0163.js; then
+            echo 'POS/Reportes v0.1.63 no deben tocar CFDI/Finkok' >&2
             exit 1
           fi
           if grep -Eiq 'cfdi-api|finkok|completeSale|saveProduct' solrak-desktop-v0163.js; then
             echo 'La capa visual v0.1.63 invadió lógica productiva' >&2
             exit 1
           fi
-          if grep -Eiq '\bfetch\s*\(|XMLHttpRequest' solrak-desktop-v0163.js; then
-            echo 'La capa visual v0.1.63 no debe hacer red' >&2
+          if grep -Eiq '\bfetch\s*\(|XMLHttpRequest' solrak-desktop-v0163.js solrak-sales-report-v0163.js; then
+            echo 'Las capas visual/reportes no deben consultar endpoints por su cuenta' >&2
             exit 1
           fi
-          echo 'SOLRAK_V0163_POS_AND_VISUAL_SAFE_OK'
+          echo 'SOLRAK_V0163_POS_REPORTS_AND_VISUAL_SAFE_OK'
 
       - name: Reconstruir FIX1 validada
         shell: bash
@@ -84,25 +86,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in quotes-module.js quotes-email-module.js product-images-module.js pos-module.js solrak-desktop-v0162.js solrak-logo-v0162.js solrak-desktop-v0163.js; do
+          for f in quotes-module.js quotes-email-module.js product-images-module.js pos-module.js solrak-desktop-v0162.js solrak-logo-v0162.js solrak-desktop-v0163.js solrak-sales-report-v0163.js; do
             cp "$f" "desktop/dist/$f"
             node --check "desktop/dist/$f"
           done
           node - <<'NODE'
           const fs=require('fs');
           const p='desktop/dist/index.html';let h=fs.readFileSync(p,'utf8');
-          const tags=['<script src="solrak-desktop-v0162.js?v=1"></script>','<script src="solrak-logo-v0162.js?v=1"></script>','<script src="solrak-desktop-v0163.js?v=1"></script>'];
+          const tags=['<script src="solrak-desktop-v0162.js?v=1"></script>','<script src="solrak-logo-v0162.js?v=1"></script>','<script src="solrak-desktop-v0163.js?v=1"></script>','<script src="solrak-sales-report-v0163.js?v=1"></script>'];
           for(const tag of tags)if(!h.includes(tag))h=h.replace('</body>',tag+'\n</body>');
           fs.writeFileSync(p,h);
           NODE
           node scripts/apply-solrak-brand-v0162.mjs desktop
           node tests/solrak-brand-v0162-smoke.mjs desktop
           grep -q 'solrak-desktop-v0163.js?v=1' desktop/dist/index.html
+          grep -q 'solrak-sales-report-v0163.js?v=1' desktop/dist/index.html
           grep -q 'SOLRAK' desktop/dist/index.html
           grep -q 'Finalizar venta' desktop/dist/pos-module.js
           grep -q 'MAX_TICKETS=7' desktop/dist/pos-module.js
+          grep -q 'Reporte de ventas' desktop/dist/solrak-sales-report-v0163.js
           if grep -Fq 'Solrak' desktop/dist/index.html; then exit 1; fi
-          echo 'SOLRAK_V0163_PACKAGED_POS_OK'
+          echo 'SOLRAK_V0163_PACKAGED_POS_REPORTS_OK'
 
       - name: Auditoría final de compatibilidad
         shell: bash
@@ -121,5 +125,7 @@ jobs:
           if(/cfdi-api|finkok/i.test(pos))throw new Error('POS tocó CFDI/Finkok');
           if(!pos.includes('payments:[payment]'))throw new Error('Contrato de pago cambió');
           if(!pos.includes("posApi('completeSale'"))throw new Error('Venta atómica ausente');
-          console.log('SOLRAK_V0163_COMPATIBILITY_OK multiTicket=true paymentContractPreserved=true updaterCompatible=true');
+          const report=fs.readFileSync('desktop/dist/solrak-sales-report-v0163.js','utf8');
+          if(/cfdi-api|finkok|\bfetch\s*\(/i.test(report))throw new Error('Reporte invadió backend/fiscal');
+          console.log('SOLRAK_V0163_COMPATIBILITY_OK multiTicket=true reportsRealData=true paymentContractPreserved=true updaterCompatible=true');
           NODE
