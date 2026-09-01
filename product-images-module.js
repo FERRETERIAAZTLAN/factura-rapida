@@ -73,11 +73,14 @@ function decorateInventory(){
   const body=byId('inventoryBody');if(!body)return;
   const rows=[...body.querySelectorAll('tr')],items=currentInventoryRows();
   rows.forEach((tr,index)=>{
-    const p=items[index];if(!p||tr.querySelector('.fr-inventory-image-cell'))return;
-    const img=makeImg(p.id,'table');
-    const td=document.createElement('td');td.className='fr-inventory-image-cell';
-    if(img)td.appendChild(img);else td.innerHTML='<span class="muted small">—</span>';
-    tr.insertBefore(td,tr.firstChild);
+    const p=items[index];if(!p)return;
+    let td=tr.querySelector('.fr-inventory-image-cell');
+    if(!td){td=document.createElement('td');td.className='fr-inventory-image-cell';tr.insertBefore(td,tr.firstChild)}
+    const current=td.querySelector('.fr-product-thumb');
+    const item=imageFor(p.id);
+    if(item?.url){
+      if(!current||current.dataset.frProductImage!==String(p.id)||current.src!==item.url){td.replaceChildren(makeImg(p.id,'table'))}
+    }else if(!td.querySelector('.muted')){td.innerHTML='<span class="muted small">—</span>'}
   });
   const table=body.closest('table');const head=table?.querySelector('thead tr');
   if(head&&!head.querySelector('.fr-inventory-image-head')){
