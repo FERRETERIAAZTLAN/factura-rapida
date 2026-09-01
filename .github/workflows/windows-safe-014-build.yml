@@ -9,6 +9,8 @@ on:
       - "Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip"
       - ".github/workflows/windows-safe-014-build.yml"
       - "index.html"
+      - "quotes-module.js"
+      - "product-images-module.js"
 
 permissions:
   contents: read
@@ -53,6 +55,19 @@ jobs:
       - name: Sincronizar web
         working-directory: desktop
         run: npm run sync-web
+
+      - name: Sincronizar modulos web externos
+        shell: pwsh
+        run: |
+          $assets = @("quotes-module.js", "product-images-module.js")
+          foreach ($asset in $assets) {
+            $source = Join-Path $PWD $asset
+            if (-not (Test-Path $source)) { throw "Falta modulo web requerido: $asset" }
+            Copy-Item -Path $source -Destination (Join-Path $PWD "desktop/dist/$asset") -Force
+          }
+          foreach ($asset in $assets) {
+            if (-not (Test-Path (Join-Path $PWD "desktop/dist/$asset"))) { throw "No se empaqueto: $asset" }
+          }
 
       - name: Compilar instalador
         working-directory: desktop
