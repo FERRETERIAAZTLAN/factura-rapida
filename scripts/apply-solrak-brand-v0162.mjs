@@ -11,8 +11,6 @@ const updaterEndpoint = 'https://github.com/FERRETERIAAZTLAN/factura-rapida/rele
 const technicalIdentifier = 'com.facturarapida.desktop';
 const technicalLogName = 'factura-rapida-startup.log';
 
-// Solo nombres heredados que son texto visible. No sustituir "solrak" de forma
-// global: forma parte de filenames y namespaces técnicos de v0.1.62.
 const oldVisibleNames = [
   'Factura Rápida',
   'Factura Rapida',
@@ -23,8 +21,9 @@ const oldVisibleNames = [
 function replaceVisibleBrand(text) {
   let out = text;
   for (const oldName of oldVisibleNames) out = out.split(oldName).join(brand);
-  // Variantes de v0.1.61 solo cuando son literales/texto HTML, no identificadores.
-  out = out.replace(/([>"'])Solrak(?=([<"']|\s))/g, `$1${brand}`);
+  // v0.1.61 usó "Solrak". Cambiarlo solo como palabra independiente evita
+  // tocar namespaces como SolrakDesktopV0162 o filenames técnicos en minúsculas.
+  out = out.replace(/\bSolrak\b/g, brand);
   return out;
 }
 
@@ -39,10 +38,7 @@ async function replaceOptional(path) {
 }
 
 const tauri = JSON.parse(await readFile(tauriPath, 'utf8'));
-if (tauri.identifier !== technicalIdentifier) {
-  throw new Error(`Identifier técnico inesperado: ${tauri.identifier}`);
-}
-
+if (tauri.identifier !== technicalIdentifier) throw new Error(`Identifier técnico inesperado: ${tauri.identifier}`);
 tauri.productName = brand;
 const windows = Array.isArray(tauri.app?.windows) ? tauri.app.windows : [];
 const mainWindow = windows.find((w) => w?.label === 'main');
@@ -62,10 +58,8 @@ for (const file of [
   'pos-module.js',
   'solrak-desktop-v0162.js',
 ]) await replaceOptional(`${desktop}/dist/${file}`);
-
 await replaceOptional(syncPath);
 
-// Guardas técnicas: el rebranding jamás puede renombrar estos contratos.
 const finalHtml = await readFile(htmlPath, 'utf8');
 if (!finalHtml.includes('solrak-desktop-v0162.js?v=1')) throw new Error('Se alteró el filename técnico del shell SOLRAK');
 const rust = await readFile(rustPath, 'utf8');
