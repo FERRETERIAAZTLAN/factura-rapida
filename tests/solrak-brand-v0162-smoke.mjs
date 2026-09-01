@@ -17,9 +17,8 @@ if(!bundled.includes('SOLRAK'))throw new Error('La UI empaquetada no contiene SO
 for(const oldName of ['Factura Rápida','Factura Rapida','FACTURA RÁPIDA','FACTURA RAPIDA']){
  if(bundled.includes(oldName))throw new Error(`Quedó marca visible anterior en el paquete: ${oldName}`);
 }
-// "Solrak" puede existir en namespaces técnicos como window.SolrakDesktopV0162,
-// pero nunca como literal de marca visible.
-if(/["']Solrak["']/.test(bundled)||/>\s*Solrak\s*</.test(html)||/<title>\s*Solrak\s*<\/title>/i.test(html))throw new Error('Quedó marca visible Solrak con capitalización antigua');
+const legacySolrak=/(?<![A-Za-z0-9_.-])Solrak(?![A-Za-z0-9_-])/;
+if(legacySolrak.test(bundled))throw new Error('Quedó la palabra visible Solrak con capitalización antigua');
 if(!html.includes('solrak-desktop-v0162.js?v=1'))throw new Error('Se alteró el filename técnico del shell');
 if(!bundled.includes('SolrakDesktopV0162'))throw new Error('No llegó el namespace técnico del shell SOLRAK v0.1.62');
 if(!rust.includes('https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json'))throw new Error('Cambió el endpoint técnico del updater');
