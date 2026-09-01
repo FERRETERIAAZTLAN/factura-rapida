@@ -3,6 +3,8 @@ name: SOLRAK v0.1.66 Professional POS Safe Test
 on:
   push:
     branches: [feature/v0.1.66-professional-pos]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
