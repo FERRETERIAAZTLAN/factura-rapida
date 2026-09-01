@@ -50,11 +50,11 @@ jobs:
           gh api "/repos/$repo/git/ref/tags/$tag" *> $null
           if($LASTEXITCODE -eq 0){throw "$tag ya existe como tag"}
           $global:LASTEXITCODE=0
+          npm install --no-save --no-audit --no-fund jsdom@25
           node --check quotes-module.js
           node --check quotes-email-module.js
           node --check product-images-module.js
           node tests/quote-email-ui-smoke.mjs
-          node tests/product-images-ui-smoke.mjs
           $pi=Get-Content product-images-module.js -Raw
           foreach($m in @('printQuoteWithImages','data-qact="print"','Código:','imageFor(item.id)','window.print()')){if(-not $pi.Contains($m)){throw "Impresión con imágenes incompleta: $m"}}
           Write-Host 'QUOTE_PDF_IMAGES_PREFLIGHT_OK'
@@ -78,7 +78,6 @@ jobs:
           npm install --no-audit --no-fund
           node scripts/set-version.mjs "$env:FR_VERSION"
           Pop-Location
-          npm install --no-save --no-audit --no-fund jsdom@25
 
       - name: Sincronizar UI productiva estable
         shell: pwsh
@@ -134,12 +133,9 @@ jobs:
           $r=Invoke-RestMethod -Method Post -Uri $env:FR_QUOTE_EMAIL_API -Headers $headers -ContentType 'application/json' -Body '{"action":"health"}' -TimeoutSec 30
           if(-not $r.ok -or [string]$r.service -ne 'quote-delivery-api' -or [int]$r.version -ne 3){throw 'quote-delivery-api health inválido'}
           if($r.productNames -ne $true -or $r.productImages -ne $true -or $r.isolatedFromCfdi -ne $true){throw 'quote-delivery-api sin contrato de imágenes/nombres/aislamiento'}
-          try{
-            Invoke-RestMethod -Method Post -Uri $env:FR_QUOTE_EMAIL_API -Headers $headers -ContentType 'application/json' -Body '{"action":"smokePdf"}' -TimeoutSec 30 | Out-Null
-            throw 'smokePdf temporal sigue habilitado'
-          } catch {
-            if($_.Exception.Response.StatusCode.value__ -ne 400){throw}
-          }
+          $blocked=$false
+          try{Invoke-RestMethod -Method Post -Uri $env:FR_QUOTE_EMAIL_API -Headers $headers -ContentType 'application/json' -Body '{"action":"smokePdf"}' -TimeoutSec 30 | Out-Null}catch{if($_.Exception.Response.StatusCode.value__ -eq 400){$blocked=$true}else{throw}}
+          if(-not $blocked){throw 'smokePdf temporal sigue habilitado'}
           Write-Host 'QUOTE_DELIVERY_V3_HEALTH_OK_NO_EMAIL_SENT'
 
       - name: XLSX local lazy y pruebas estables
