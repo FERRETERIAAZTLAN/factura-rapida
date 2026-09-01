@@ -1,0 +1,51 @@
+name: SOLRAK v0.1.67 Clear Footer Safe Test
+
+on:
+  push:
+    branches: [fix/v0.1.67-pos-clear-footer]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias de prueba
+        run: npm install --no-save --no-audit --no-fund jsdom@25
+
+      - name: Validar sintaxis y regresión visual
+        run: |
+          node --check solrak-pos-clear-footer-v0167.js
+          node --check tests/solrak-pos-clear-footer-v0167-smoke.mjs
+          node tests/solrak-pos-clear-footer-v0167-smoke.mjs
+          node tests/solrak-professional-pos-v0166-smoke.mjs
+          node tests/solrak-pos-workspace-v0165-smoke.mjs
+          node tests/pos-module-smoke.mjs
+          node tests/pos-suma-v0163-smoke.mjs
+          node tests/solrak-v0164-cash-report-contract.mjs
+
+      - name: Confirmar aislamiento de la corrección
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'data-solrak-professional-pos="1".*#frBrandPill' solrak-pos-clear-footer-v0167.js
+          grep -q 'display:none!important' solrak-pos-clear-footer-v0167.js
+          grep -q 'padding-bottom:max(12px,env(safe-area-inset-bottom))' solrak-pos-clear-footer-v0167.js
+          if grep -Eiq 'fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|finkok|supabase' solrak-pos-clear-footer-v0167.js; then
+            echo 'La corrección visual invadió red, venta, Supabase o CFDI' >&2
+            exit 1
+          fi
+          echo 'SOLRAK_V0167_CLEAR_FOOTER_SAFE_OK'
