@@ -44,3 +44,11 @@ function scheduleDecorate(){clearTimeout(decorateTimer);decorateTimer=setTimeout
 function boot(){const wait=()=>{const list=byId('quoteList'),tab=byId('quotesTabBtn');if(!list||!tab){setTimeout(wait,120);return}new MutationObserver(scheduleDecorate).observe(list,{childList:true,subtree:true});tab.addEventListener('click',()=>setTimeout(loadMailState,180));byId('refreshQuotesBtn')?.addEventListener('click',()=>setTimeout(loadMailState,180));if(session?.token)loadMailState();decorate()};wait()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
+(function(){
+  if(document.querySelector('script[data-fr-pos-loader]'))return;
+  const s=document.createElement('script');
+  s.src='pos-module.js?v=1';
+  s.dataset.frPosLoader='1';
+  s.async=false;
+  document.body.appendChild(s);
+})();
