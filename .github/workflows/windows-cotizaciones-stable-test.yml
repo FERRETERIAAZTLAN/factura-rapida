@@ -1,0 +1,184 @@
+name: Factura Rapida Windows Cotizaciones - Stable Test
+
+on:
+  push:
+    branches:
+      - feature/windows-cotizaciones-stable
+    paths:
+      - '.github/workflows/windows-cotizaciones-stable-test.yml'
+      - 'quotes-module.js'
+      - 'index.html'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FR_VERSION: '0.1.55'
+  FR_PRODUCTION_UI_URL: 'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15'
+  FR_FIX1_COMMIT: '73ff1fa0d4345d492278eef5f2dc836e7ece7695'
+
+jobs:
+  build-test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 95
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Backend productivo read-only
+        shell: pwsh
+        run: node tests/production-live-smoke.mjs
+
+      - name: Reconstruir base FIX1 validada
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cmd /c "git show $env:FR_FIX1_COMMIT`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1'}
+          $sha=(Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne '144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134'){throw "FIX1 hash inesperado $sha"}
+          Expand-Archive FIX1.zip . -Force
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          node scripts/ensure-rust-deps-v0143.mjs desktop/src-tauri/Cargo.toml
+          Push-Location desktop
+          npm install --no-audit --no-fund
+          node scripts/set-version.mjs "$env:FR_VERSION"
+          Pop-Location
+          npm install --no-save --no-audit --no-fund jsdom@25
+
+      - name: Sincronizar UI productiva estable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'; $ok=$false
+          for($i=1;$i -le 8;$i++){
+            try{
+              Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile production-source.html -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -TimeoutSec 30
+              if((Get-Item production-source.html).Length -gt 10000){$ok=$true;break}
+            } catch { Write-Host "UI fetch $i fallo: $($_.Exception.Message)" }
+            Start-Sleep -Seconds ([Math]::Min(3*$i,15))
+          }
+          if(-not $ok){throw 'UI productiva no disponible'}
+          $env:FR_WEB_SOURCE=(Resolve-Path production-source.html).Path
+          Push-Location desktop
+          npm run sync-web
+          Pop-Location
+          node scripts/sanitize-production-ui-v0142.mjs desktop/dist/index.html
+          node scripts/clean-webview-startup-v0148.mjs desktop/dist/index.html
+          node scripts/fix-facturar-mutation-v0148.mjs desktop/dist/index.html
+
+      - name: Integrar Cotizaciones de forma aislada
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node --check quotes-module.js
+          Copy-Item quotes-module.js desktop/dist/quotes-module.js -Force
+          $p='desktop/dist/index.html'
+          $h=Get-Content $p -Raw
+          $tag='<script src="quotes-module.js?v=1"></script>'
+          if(-not $h.Contains($tag)){
+            if(-not $h.Contains('</body>')){throw 'index.html sin cierre body'}
+            $h=$h.Replace('</body>',"$tag`r`n</body>")
+            Set-Content $p $h -Encoding UTF8
+          }
+          $check=Get-Content $p -Raw
+          if(-not $check.Contains($tag)){throw 'No se integro quotes-module.js'}
+          if(-not (Test-Path desktop/dist/quotes-module.js)){throw 'Falta quotes-module.js en dist'}
+          Write-Host 'COTIZACIONES_INTEGRADAS_OK'
+
+      - name: XLSX local lazy y pruebas estables
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force desktop/dist/vendor | Out-Null
+          $dest='desktop/dist/vendor/xlsx.full.min.js'; $ok=$false
+          for($i=1;$i -le 6;$i++){
+            try{
+              Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js' -OutFile $dest -UseBasicParsing -TimeoutSec 30
+              if((Get-Item $dest).Length -gt 500000){$ok=$true;break}
+            } catch { Write-Host "XLSX fetch $i fallo" }
+            Start-Sleep -Seconds (2*$i)
+          }
+          if(-not $ok){throw 'XLSX incompleto'}
+          node scripts/vendor-windows-xlsx-lazy-v0144.mjs desktop/dist/index.html $dest
+          node tests/windows-xlsx-lazy-v0144.mjs desktop/dist/index.html
+          node tests/windows-facturar-mutation-v0148.mjs desktop/dist/index.html
+          node tests/audit-external-startup-resources.mjs desktop/dist/index.html --require-zero
+          node tests/ui-login-smoke-v15.mjs desktop/dist/index.html
+          $env:FR_LOCAL_UI_PATH='desktop/dist/index.html'
+          node tests/production-live-smoke.mjs
+
+      - name: Verificar puentes y Cotizaciones
+        shell: pwsh
+        run: |
+          $h=Get-Content desktop/dist/index.html -Raw
+          foreach($m in @('frNativeBar','frNativeDesktopJs','window.__TAURI__','desktop_info','check_for_updates','install_update','quotes-module.js?v=1')){
+            if(-not $h.Contains($m)){throw "Marcador faltante $m"}
+          }
+          $q=Get-Content desktop/dist/quotes-module.js -Raw
+          foreach($m in @('quote-api','Cotizaciones','Guardar cotización','Pasar a factura')){
+            if(-not $q.Contains($m)){throw "Cotizaciones incompletas: $m"}
+          }
+
+      - name: Cargo check
+        shell: pwsh
+        run: |
+          Push-Location desktop/src-tauri
+          cargo generate-lockfile
+          cargo check --locked
+          Pop-Location
+
+      - name: Compilar EXE real
+        working-directory: desktop
+        shell: pwsh
+        run: npm run tauri -- build --bundles nsis
+
+      - name: Aceptacion EXE real
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $log=Join-Path $env:TEMP 'factura-rapida-startup.log'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          $exe=(Resolve-Path 'desktop/src-tauri/target/release/factura-rapida.exe').Path
+          $p=Start-Process -FilePath $exe -PassThru
+          try{
+            $ok=$false
+            for($i=1;$i -le 150;$i++){
+              Start-Sleep -Seconds 1
+              if($p.HasExited){
+                $txt=if(Test-Path $log){Get-Content $log -Raw}else{'(sin log)'}
+                throw "EXE se cerro: $txt"
+              }
+              if(Test-Path $log){
+                $txt=Get-Content $log -Raw
+                $base=$txt.Contains("START $env:FR_VERSION") -and $txt.Contains("SETUP_OK $env:FR_VERSION") -and $txt.Contains('PAGE_LOAD Started') -and $txt.Contains('PAGE_LOAD Finished')
+                $dom=$txt.Contains('WEBVIEW_MILESTONE DOM_CONTENT_LOADED')
+                $ready=$txt.Contains('WEBVIEW_MILESTONE LOGIN_HIT_FOCUS_OK') -and $txt.Contains('LOGIN_UI_READY ') -and $txt.Contains('"ok":true') -and $txt.Contains('"hitOk":true') -and $txt.Contains('"focusOk":true')
+                if($base -and $dom -and $ready){$ok=$true;Write-Host $txt;break}
+              }
+            }
+            if(-not $ok){throw 'EXE no paso aceptacion de arranque'}
+            Start-Sleep -Seconds 25
+            if($p.HasExited){throw 'EXE se cerro despues de LOGIN_UI_READY'}
+          } finally {
+            if(-not $p.HasExited){Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue}
+          }
+          Write-Host 'WINDOWS_COTIZACIONES_STABLE_ACCEPTANCE_OK'
+
+      - name: Guardar instalador probado
+        uses: actions/upload-artifact@v4
+        with:
+          name: Factura-Rapida-Windows-0.1.55-COTIZACIONES-STABLE-TEST
+          path: desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14
