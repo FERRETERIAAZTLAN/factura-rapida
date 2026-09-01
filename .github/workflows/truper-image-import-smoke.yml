@@ -1,4 +1,4 @@
-name: Truper image import smoke
+name: Truper official image bulk import
 on:
   push:
     branches: [feature/truper-product-images]
@@ -7,32 +7,53 @@ permissions:
   contents: read
   id-token: write
 jobs:
-  import-smoke:
+  bulk-import:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Get GitHub OIDC token
-        shell: bash
-        run: |
-          set -euo pipefail
-          TOKEN_JSON=$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=factura-rapida-truper-import")
-          OIDC=$(printf '%s' "$TOKEN_JSON" | jq -r '.value')
-          test -n "$OIDC" && test "$OIDC" != "null"
-          echo "OIDC_TOKEN=$OIDC" >> "$GITHUB_ENV"
-      - name: Import 3 official Truper images
+      - name: Import official Truper images into Supabase Storage
         shell: bash
         run: |
           set -euo pipefail
           URL='https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/truper-image-import-api'
-          RESP=$(curl -fsSL -X POST "$URL" \
-            -H "Authorization: Bearer ${OIDC_TOKEN}" \
-            -H 'Content-Type: application/json' \
-            --data '{"action":"importBatch","limit":3}')
-          printf '%s\n' "$RESP" | jq .
-          test "$(printf '%s' "$RESP" | jq -r '.ok')" = "true"
-          test "$(printf '%s' "$RESP" | jq -r '.selected')" = "3"
-          UPLOADED=$(printf '%s' "$RESP" | jq -r '.uploaded')
-          if [ "$UPLOADED" -lt 1 ]; then
-            echo 'Ninguna imagen se pudo subir en el smoke test.' >&2
+          total_selected=0
+          total_uploaded=0
+          total_failed=0
+          completed=0
+          for batch in $(seq 1 60); do
+            TOKEN_JSON=$(curl -fsSL --retry 3 --retry-all-errors \
+              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=factura-rapida-truper-import")
+            OIDC=$(printf '%s' "$TOKEN_JSON" | jq -r '.value')
+            test -n "$OIDC" && test "$OIDC" != "null"
+
+            RESP=$(curl -fsSL --retry 3 --retry-all-errors --max-time 150 \
+              -X POST "$URL" \
+              -H "Authorization: Bearer ${OIDC}" \
+              -H 'Content-Type: application/json' \
+              --data '{"action":"importBatch","limit":15}')
+
+            ok=$(printf '%s' "$RESP" | jq -r '.ok')
+            selected=$(printf '%s' "$RESP" | jq -r '.selected // 0')
+            uploaded=$(printf '%s' "$RESP" | jq -r '.uploaded // 0')
+            failed=$(printf '%s' "$RESP" | jq -r '.failed // 0')
+            test "$ok" = "true"
+
+            echo "batch=$batch selected=$selected uploaded=$uploaded failed=$failed"
+            total_selected=$((total_selected + selected))
+            total_uploaded=$((total_uploaded + uploaded))
+            total_failed=$((total_failed + failed))
+
+            if [ "$selected" -eq 0 ]; then
+              completed=1
+              break
+            fi
+            sleep 1
+          done
+
+          echo "TRUPER_IMPORT_TOTAL selected=$total_selected uploaded=$total_uploaded failed=$total_failed"
+          if [ "$completed" -ne 1 ]; then
+            echo 'El importador no agotó la cola dentro del límite seguro.' >&2
             exit 1
           fi
