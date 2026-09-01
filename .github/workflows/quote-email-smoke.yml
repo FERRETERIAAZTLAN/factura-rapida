@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/quote-email-smoke.yml'
+      - 'quotes-email-module.js'
+      - 'tests/quote-email-ui-smoke.mjs'
   workflow_dispatch:
 
 permissions:
