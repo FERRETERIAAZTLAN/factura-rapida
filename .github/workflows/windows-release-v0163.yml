@@ -1,0 +1,345 @@
+name: SOLRAK - Release v0.1.63 Stable
+
+on:
+  push:
+    branches: [release/v0.1.63-solrak]
+    paths:
+      - '.github/workflows/windows-release-v0163.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FR_VERSION: "0.1.63"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+  FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
+  FR_QUOTE_EMAIL_API: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/quote-delivery-api"
+  FR_POS_API: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/pos-api"
+  FR_SUPPLIER_API: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/supplier-api"
+  FR_PRODUCT_IMAGE_API: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/product-image-api"
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    timeout-minutes: 100
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Preflight SOLRAK POS multi-ticket reportes editor logo y módulos estables
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo='${{ github.repository }}'
+          $tag="v$env:FR_VERSION"
+          $rels=gh api "/repos/$repo/releases?per_page=100" | ConvertFrom-Json
+          if($rels | Where-Object {$_.tag_name -eq $tag}){throw "$tag ya existe"}
+          gh api "/repos/$repo/git/ref/tags/$tag" *> $null
+          if($LASTEXITCODE -eq 0){throw "$tag ya existe como tag"}
+          $global:LASTEXITCODE=0
+          npm install --no-save --no-audit --no-fund jsdom@25
+          foreach($f in @('quotes-module.js','quotes-email-module.js','product-images-module.js','pos-module.js','solrak-desktop-v0162.js','solrak-logo-v0162.js','solrak-desktop-v0163.js','solrak-sales-report-v0163.js','scripts/apply-solrak-brand-v0162.mjs','tests/solrak-brand-v0162-smoke.mjs','tests/solrak-desktop-v0162-smoke.mjs','tests/solrak-logo-v0162-smoke.mjs','tests/pos-suma-v0163-smoke.mjs','tests/solrak-desktop-v0163-smoke.mjs','tests/solrak-sales-report-v0163-smoke.mjs')){node --check $f}
+          node tests/quote-email-ui-smoke.mjs
+          node tests/pos-suma-v0163-smoke.mjs
+          node tests/solrak-sales-report-v0163-smoke.mjs
+          node tests/solrak-desktop-v0162-smoke.mjs
+          node tests/solrak-logo-v0162-smoke.mjs
+          node tests/solrak-desktop-v0163-smoke.mjs
+          if(-not(Test-Path 'branding/solrak-icon.svg')){throw 'Falta logo vectorial SOLRAK'}
+          $qe=Get-Content quotes-email-module.js -Raw
+          foreach($m in @('normalizeEmail','quoteCustomerEmail','sendQuoteEmail','pos-module.js?v=1','data-fr-pos-loader')){if(-not $qe.Contains($m)){throw "Módulo correo/POS incompleto: $m"}}
+          $pm=Get-Content pos-module.js -Raw
+          foreach($m in @('Punto de venta','Proveedores','completeSale','openCash','closeCash','posSearch','PRODUCT_IMAGE_BASE','MAX_TICKETS=7','posPayDialog','chargeLock')){if(-not $pm.Contains($m)){throw "Contrato POS v0.1.63 incompleto: $m"}}
+          if($pm -match '(?i)cfdi-api|finkok'){throw 'El POS v0.1.63 no debe tocar CFDI/Finkok'}
+          $report=Get-Content solrak-sales-report-v0163.js -Raw
+          foreach($m in @('Reporte de ventas','FacturaRapidaPOS','recentSales','srTotal','srAverage')){if(-not $report.Contains($m)){throw "Reporte v0.1.63 incompleto: $m"}}
+          if($report -match '(?i)cfdi-api|finkok|\bfetch\s*\('){throw 'Reporte v0.1.63 invadió backend/fiscal'}
+          $sd=Get-Content solrak-desktop-v0162.js -Raw
+          foreach($m in @('Precio mayoreo','Precio público','Inventario mínimo','Inventario máximo','Clave unidad SAT','uploadImage')){if(-not $sd.Contains($m)){throw "Editor SOLRAK incompleto: $m"}}
+          if($sd -match '(?i)cfdi-api|finkok'){throw 'El editor SOLRAK no debe tocar CFDI/Finkok'}
+          $polish=Get-Content solrak-desktop-v0163.js -Raw
+          if($polish -match '(?i)cfdi-api|finkok|completeSale|saveProduct|\bfetch\s*\('){throw 'La capa visual v0.1.63 invadió lógica productiva'}
+          $sl=Get-Content solrak-logo-v0162.js -Raw
+          if($sl -match '(?i)cfdi-api|finkok'){throw 'El logo SOLRAK no debe tocar CFDI/Finkok'}
+          Write-Host 'SOLRAK_V0163_PREFLIGHT_OK_NO_REAL_SALE'
+
+      - name: Backend productivo read-only sin CFDI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node tests/production-live-smoke.mjs
+          $h=Get-Content index.html -Raw
+          $m=[regex]::Match($h,'const\s+ANON_KEY\s*=\s*[''"]([^''"]+)[''"]')
+          if(-not $m.Success){throw 'No se pudo leer ANON_KEY pública'}
+          $anon=$m.Groups[1].Value
+          $headers=@{Authorization="Bearer $anon";apikey=$anon}
+          $p=Invoke-RestMethod -Method Post -Uri $env:FR_POS_API -Headers $headers -ContentType 'application/json' -Body '{"action":"health"}' -TimeoutSec 30
+          if(-not $p.ok -or [string]$p.service -ne 'pos-api' -or [int]$p.version -ne 1 -or $p.atomicSale -ne $true -or $p.stockMovements -ne $true -or $p.cashSessions -ne $true -or $p.cfdiUntouched -ne $true){throw 'pos-api health/contrato inválido'}
+          $s=Invoke-RestMethod -Method Post -Uri $env:FR_SUPPLIER_API -Headers $headers -ContentType 'application/json' -Body '{"action":"health"}' -TimeoutSec 30
+          if(-not $s.ok -or [string]$s.service -ne 'supplier-api' -or [int]$s.version -ne 1 -or $s.suppliers -ne $true -or $s.productLinks -ne $true){throw 'supplier-api health/contrato inválido'}
+          $im=Invoke-RestMethod -Method Post -Uri $env:FR_PRODUCT_IMAGE_API -Headers $headers -ContentType 'application/json' -Body '{"action":"health"}' -TimeoutSec 30
+          if(-not $im.ok -or [string]$im.service -ne 'product-image-api' -or [int]$im.version -ne 2 -or $im.manualUpload -ne $true){throw 'product-image-api v2 health inválido'}
+          Write-Host 'POS_SUPPLIER_IMAGE_HEALTH_OK_READ_ONLY_NO_CFDI'
+
+      - name: Reconstruir base FIX1 validada y generar iconos SOLRAK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cmd /c "git show $env:FR_FIX1_COMMIT`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1'}
+          $sha=(Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne '144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134'){throw "FIX1 hash inesperado $sha"}
+          Expand-Archive FIX1.zip . -Force
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          node scripts/ensure-rust-deps-v0143.mjs desktop/src-tauri/Cargo.toml
+          Push-Location desktop
+          npm install --no-audit --no-fund
+          node scripts/set-version.mjs "$env:FR_VERSION"
+          npm run tauri -- icon ../branding/solrak-icon.svg
+          Pop-Location
+          foreach($f in @('desktop/src-tauri/icons/icon.ico','desktop/src-tauri/icons/32x32.png','desktop/src-tauri/icons/128x128.png','desktop/src-tauri/icons/128x128@2x.png')){if(-not(Test-Path $f)){throw "Falta icono generado $f"};if((Get-Item $f).Length -lt 500){throw "Icono generado inválido $f"}}
+          Write-Host 'SOLRAK_WINDOWS_ICONS_GENERATED_OK'
+
+      - name: Sincronizar UI productiva estable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $ok=$false
+          for($i=1;$i -le 8;$i++){
+            try{
+              Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile production-source.html -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -TimeoutSec 30
+              if((Get-Item production-source.html).Length -gt 10000){$ok=$true;break}
+            } catch { Write-Host "UI fetch $i falló: $($_.Exception.Message)" }
+            Start-Sleep -Seconds ([Math]::Min(3*$i,15))
+          }
+          if(-not $ok){throw 'UI productiva no disponible'}
+          $env:FR_WEB_SOURCE=(Resolve-Path production-source.html).Path
+          Push-Location desktop
+          npm run sync-web
+          Pop-Location
+          node scripts/sanitize-production-ui-v0142.mjs desktop/dist/index.html
+          node scripts/clean-webview-startup-v0148.mjs desktop/dist/index.html
+          node scripts/fix-facturar-mutation-v0148.mjs desktop/dist/index.html
+
+      - name: Integrar módulos estables POS multi-ticket shell reportes y logo SOLRAK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($f in @('quotes-module.js','quotes-email-module.js','product-images-module.js','pos-module.js','solrak-desktop-v0162.js','solrak-logo-v0162.js','solrak-desktop-v0163.js','solrak-sales-report-v0163.js')){
+            if(-not(Test-Path $f)){throw "Falta módulo origen $f"}
+            Copy-Item $f "desktop/dist/$f" -Force
+            node --check "desktop/dist/$f"
+          }
+          $p='desktop/dist/index.html'
+          $h=Get-Content $p -Raw
+          foreach($tag in @('<script src="quotes-module.js?v=1"></script>','<script src="quotes-email-module.js?v=1"></script>','<script src="product-images-module.js?v=1"></script>','<script src="solrak-desktop-v0162.js?v=1"></script>','<script src="solrak-logo-v0162.js?v=1"></script>','<script src="solrak-desktop-v0163.js?v=1"></script>','<script src="solrak-sales-report-v0163.js?v=1"></script>')){
+            if(-not $h.Contains($tag)){
+              if(-not $h.Contains('</body>')){throw 'index.html sin cierre body'}
+              $h=$h.Replace('</body>',"$tag`r`n</body>")
+            }
+          }
+          Set-Content $p $h -Encoding UTF8
+          $qe=Get-Content desktop/dist/quotes-email-module.js -Raw
+          if(-not $qe.Contains('pos-module.js?v=1')){throw 'El paquete no carga pos-module.js'}
+          foreach($f in @('desktop/dist/pos-module.js','desktop/dist/solrak-desktop-v0163.js','desktop/dist/solrak-sales-report-v0163.js')){if(-not(Test-Path $f)){throw "Falta módulo empaquetado $f"}}
+          Write-Host 'WINDOWS_PACKAGE_V0163_POS_REPORTS_SOLRAK_UI_OK'
+
+      - name: Aplicar marca SOLRAK compatible
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node scripts/apply-solrak-brand-v0162.mjs desktop
+          node tests/solrak-brand-v0162-smoke.mjs desktop
+          $t=Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          if([string]$t.productName -ne 'SOLRAK'){throw 'productName no es SOLRAK'}
+          if([string]$t.identifier -ne 'com.facturarapida.desktop'){throw 'Identifier técnico cambió'}
+          $w=$t.app.windows | Where-Object {$_.label -eq 'main'} | Select-Object -First 1
+          if(-not $w -or [string]$w.title -ne 'SOLRAK'){throw 'Título de ventana no es SOLRAK'}
+          $h=Get-Content desktop/dist/index.html -Raw
+          foreach($m in @('solrak-desktop-v0162.js?v=1','solrak-logo-v0162.js?v=1','solrak-desktop-v0163.js?v=1','solrak-sales-report-v0163.js?v=1','SOLRAK')){if(-not $h.Contains($m)){throw "Marca/UI incompleta: $m"}}
+          if($h.Contains('Factura Rápida') -or $h.Contains('Factura Rapida')){throw 'Quedó marca anterior visible'}
+          Write-Host 'SOLRAK_V0163_BRAND_COMPATIBILITY_OK'
+
+      - name: Verificar quote-delivery-api v3 sin enviar correo
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $h=Get-Content desktop/dist/index.html -Raw
+          $m=[regex]::Match($h,'const\s+ANON_KEY\s*=\s*[''"]([^''"]+)[''"]')
+          if(-not $m.Success){throw 'No se pudo leer ANON_KEY pública'}
+          $anon=$m.Groups[1].Value
+          $headers=@{Authorization="Bearer $anon";apikey=$anon}
+          $r=Invoke-RestMethod -Method Post -Uri $env:FR_QUOTE_EMAIL_API -Headers $headers -ContentType 'application/json' -Body '{"action":"health"}' -TimeoutSec 30
+          if(-not $r.ok -or [string]$r.service -ne 'quote-delivery-api' -or [int]$r.version -ne 3){throw 'quote-delivery-api health inválido'}
+          if($r.productNames -ne $true -or $r.productImages -ne $true -or $r.isolatedFromCfdi -ne $true){throw 'quote-delivery-api contrato inválido'}
+          Write-Host 'QUOTE_DELIVERY_V3_HEALTH_OK_NO_EMAIL_SENT'
+
+      - name: XLSX local lazy y pruebas estables
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force desktop/dist/vendor | Out-Null
+          $dest='desktop/dist/vendor/xlsx.full.min.js'
+          $ok=$false
+          for($i=1;$i -le 6;$i++){
+            try{Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js' -OutFile $dest -UseBasicParsing -TimeoutSec 30;if((Get-Item $dest).Length -gt 500000){$ok=$true;break}}catch{Write-Host "XLSX fetch $i falló"}
+            Start-Sleep -Seconds (2*$i)
+          }
+          if(-not $ok){throw 'XLSX incompleto'}
+          node scripts/vendor-windows-xlsx-lazy-v0144.mjs desktop/dist/index.html $dest
+          node tests/windows-xlsx-lazy-v0144.mjs desktop/dist/index.html
+          node tests/windows-facturar-mutation-v0148.mjs desktop/dist/index.html
+
+      - name: Auditorías productivas login POS reportes editor logo y SOLRAK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node tests/audit-external-startup-resources.mjs desktop/dist/index.html --require-zero
+          node tests/ui-login-smoke-v15.mjs desktop/dist/index.html
+          node tests/solrak-brand-v0162-smoke.mjs desktop
+          $env:FR_LOCAL_UI_PATH='desktop/dist/index.html'
+          node tests/production-live-smoke.mjs
+          $h=Get-Content desktop/dist/index.html -Raw
+          foreach($m in @('SOLRAK','frNativeBar','frNativeDesktopJs','window.__TAURI__','desktop_info','check_for_updates','install_update','quotes-module.js?v=1','quotes-email-module.js?v=1','product-images-module.js?v=1','solrak-desktop-v0162.js?v=1','solrak-logo-v0162.js?v=1','solrak-desktop-v0163.js?v=1','solrak-sales-report-v0163.js?v=1')){if(-not $h.Contains($m)){throw "Marcador faltante $m"}}
+          if($h.Contains('Factura Rápida') -or $h.Contains('Factura Rapida')){throw 'Quedó marca anterior visible'}
+          foreach($f in @('desktop/dist/pos-module.js','desktop/dist/solrak-logo-v0162.js','desktop/dist/solrak-desktop-v0163.js','desktop/dist/solrak-sales-report-v0163.js')){if(-not(Test-Path $f)){throw "Módulo no llegó al EXE: $f"}}
+          $pos=Get-Content desktop/dist/pos-module.js -Raw
+          if($pos -match '(?i)cfdi-api|finkok'){throw 'POS empaquetado tocó CFDI/Finkok'}
+          if(-not $pos.Contains("posApi('completeSale'")){throw 'Venta atómica ausente en paquete'}
+          Write-Host 'PRODUCTION_AUDIT_LOGIN_POS_REPORTS_EDITOR_LOGO_SOLRAK_OK'
+
+      - name: Cargo check y configurar updater firmado
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Push-Location desktop/src-tauri
+          cargo generate-lockfile
+          cargo check --locked
+          Pop-Location
+          if([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)){throw 'Falta signing key'}
+          if([string]::IsNullOrWhiteSpace($env:FR_UPDATER_PUBKEY)){throw 'Falta updater pubkey'}
+          $t=Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          if([string]$t.version -ne $env:FR_VERSION){throw 'Versión incorrecta'}
+          if([string]$t.productName -ne 'SOLRAK'){throw 'Marca SOLRAK no llegó a Tauri'}
+          if([string]$t.identifier -ne 'com.facturarapida.desktop'){throw 'Identifier técnico incompatible'}
+          $c=@{app=@{withGlobalTauri=$true};bundle=@{createUpdaterArtifacts=$true};plugins=@{updater=@{pubkey=$env:FR_UPDATER_PUBKEY;endpoints=@('https://github.com/FERRETERIAAZTLAN/factura-rapida/releases/latest/download/latest.json')}}}
+          $c | ConvertTo-Json -Depth 10 | Set-Content desktop/src-tauri/tauri.release.conf.json -Encoding UTF8
+
+      - name: Compilar y firmar EXE real
+        working-directory: desktop
+        shell: pwsh
+        run: npm run tauri -- build --config src-tauri/tauri.release.conf.json --bundles nsis
+
+      - name: Aceptación EXE real completa
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $log=Join-Path $env:TEMP 'factura-rapida-startup.log'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          $exe=(Resolve-Path 'desktop/src-tauri/target/release/factura-rapida.exe').Path
+          $p=Start-Process -FilePath $exe -PassThru
+          try{
+            $ok=$false
+            for($i=1;$i -le 150;$i++){
+              Start-Sleep -Seconds 1
+              if($p.HasExited){$txt=if(Test-Path $log){Get-Content $log -Raw}else{'(sin log)'};throw "EXE se cerró: $txt"}
+              if(Test-Path $log){
+                $txt=Get-Content $log -Raw
+                $base=$txt.Contains("START $env:FR_VERSION") -and $txt.Contains("SETUP_OK $env:FR_VERSION") -and $txt.Contains('PAGE_LOAD Started') -and $txt.Contains('PAGE_LOAD Finished')
+                $dom=$txt.Contains('WEBVIEW_MILESTONE DOM_CONTENT_LOADED')
+                $ready=$txt.Contains('WEBVIEW_MILESTONE LOGIN_HIT_FOCUS_OK') -and $txt.Contains('LOGIN_UI_READY ') -and $txt.Contains('"ok":true') -and $txt.Contains('"hitOk":true') -and $txt.Contains('"focusOk":true')
+                if($base -and $dom -and $ready){$ok=$true;Write-Host $txt;break}
+              }
+            }
+            if(-not $ok){$txt=if(Test-Path $log){Get-Content $log -Raw}else{'(sin log)'};throw "EXE real no pasó aceptación: $txt"}
+            Start-Sleep -Seconds 25
+            if($p.HasExited){throw 'EXE se cerró después de LOGIN_UI_READY'}
+          } finally {if(-not $p.HasExited){Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue}}
+          Write-Host 'WINDOWS_REAL_ACCEPTANCE_0.1.63_SOLRAK_OK'
+
+      - name: Preparar assets firma y hashes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $nsis='desktop/src-tauri/target/release/bundle/nsis'
+          $exe=Get-ChildItem $nsis -File -Filter '*.exe' | Select-Object -First 1
+          if(-not $exe){throw 'No EXE NSIS'}
+          $sig="$($exe.FullName).sig"
+          if(-not(Test-Path $sig)){throw 'No firma .sig'}
+          New-Item -ItemType Directory -Force release-files | Out-Null
+          $name="SOLRAK_$env:FR_VERSION`_x64-setup.exe"
+          Copy-Item $exe.FullName "release-files/$name" -Force
+          Copy-Item $sig "release-files/$name.sig" -Force
+          $eh=(Get-FileHash "release-files/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $sh=(Get-FileHash "release-files/$name.sig" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "FR_ASSET_EXE=$name" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "FR_EXE_SHA256=$eh" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "FR_SIG_SHA256=$sh" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          $repo='${{ github.repository }}';$tag="v$env:FR_VERSION";$signature=(Get-Content "release-files/$name.sig" -Raw).Trim();$url="https://github.com/$repo/releases/download/$tag/$name"
+          $j=[ordered]@{version=$env:FR_VERSION;notes='SOLRAK v0.1.63: POS de escritorio con hasta 7 tickets aislados, panel de imagen de producto, modal de cobro, corte de caja visual y reporte de ventas con datos reales cargados. Marca, editor, cotizaciones, correo, Proveedores y actualizador preservados. Compatible con instalaciones existentes.';pub_date=[DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ');platforms=[ordered]@{'windows-x86_64'=[ordered]@{signature=$signature;url=$url}}}
+          $j | ConvertTo-Json -Depth 8 | Set-Content release-files/latest.json -Encoding UTF8
+          "FR_LATEST_SHA256=$((Get-FileHash release-files/latest.json -Algorithm SHA256).Hash.ToLowerInvariant())" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "EXE_SHA256=$eh"
+          Write-Host "SIG_SHA256=$sh"
+
+      - name: Publicar estable y marcar Latest explícitamente
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
+          gh release create $tag "release-files/$env:FR_ASSET_EXE" "release-files/$env:FR_ASSET_EXE.sig" release-files/latest.json --repo $repo --target '${{ github.sha }}' --title "SOLRAK $tag" --notes 'v0.1.63 estable: POS multi-ticket, modal de cobro, imagen de producto, corte de caja visual, reporte de ventas y pulido de escritorio. POS transaccional, Proveedores, cotizaciones, correo, CFDI productivo existente y updater preservados. EXE real validado.' --draft
+          $r=$null
+          for($i=1;$i -le 20;$i++){
+            $rels=gh api "/repos/$repo/releases?per_page=100" | ConvertFrom-Json
+            $r=$rels | Where-Object {$_.tag_name -eq $tag -and $_.draft} | Select-Object -First 1
+            if($r -and $r.assets.Count -ge 3){break}
+            Start-Sleep -Seconds 2
+          }
+          if(-not $r){throw 'No se encontró borrador de release'}
+          $expected=@{$env:FR_ASSET_EXE="sha256:$env:FR_EXE_SHA256";"$env:FR_ASSET_EXE.sig"="sha256:$env:FR_SIG_SHA256";'latest.json'="sha256:$env:FR_LATEST_SHA256"}
+          foreach($n in $expected.Keys){$a=$r.assets|Where-Object {$_.name -eq $n}|Select-Object -First 1;if(-not $a){throw "Falta asset $n"};if([string]$a.digest -ne $expected[$n]){throw "Hash remoto incorrecto $n"}}
+          $pub=gh api --method PATCH "/repos/$repo/releases/$($r.id)" -F draft=false -F prerelease=false | ConvertFrom-Json
+          if($pub.draft -or $pub.prerelease -or [string]$pub.tag_name -ne $tag){throw 'Release no quedó pública'}
+          gh release edit $tag --repo $repo --latest
+          Write-Host 'V0163_SOLRAK_PUBLICADA_Y_MARCADA_LATEST'
+
+      - name: Verificación pública final por tag y latest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
+          $r=gh api "/repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          $latest=gh api "/repos/$repo/releases/latest" | ConvertFrom-Json
+          if($r.draft -or $r.prerelease -or [string]$r.tag_name -ne $tag){throw 'Release tag inválida'}
+          if([string]$latest.tag_name -ne $tag){throw 'v0.1.63 no es Latest'}
+          foreach($n in @($env:FR_ASSET_EXE,"$env:FR_ASSET_EXE.sig",'latest.json')){if(-not($r.assets|Where-Object {$_.name -eq $n})){throw "Falta asset público $n"}}
+          $j=Invoke-RestMethod "https://github.com/$repo/releases/latest/download/latest.json" -TimeoutSec 30
+          if([string]$j.version -ne $env:FR_VERSION){throw 'latest.json versión incorrecta'}
+          Write-Host 'PUBLIC_RELEASE_OK v0.1.63 SOLRAK LATEST'
+
+      - name: Limpiar borrador si falla antes de publicar
+        if: failure()
+        shell: pwsh
+        run: |
+          $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
+          try{
+            $rels=gh api "/repos/$repo/releases?per_page=100" | ConvertFrom-Json
+            $r=$rels | Where-Object {$_.tag_name -eq $tag -and $_.draft} | Select-Object -First 1
+            if($r){gh api --method DELETE "/repos/$repo/releases/$($r.id)" | Out-Null;Write-Host 'Borrador fallido eliminado'}
+          }catch{Write-Host "Limpieza no crítica: $($_.Exception.Message)"}
