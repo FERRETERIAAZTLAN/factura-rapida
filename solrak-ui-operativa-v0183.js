@@ -148,7 +148,7 @@ html[data-solrak-ui83="1"] #tab-pos aside.summary{border:0!important;border-radi
     const signature = img?.src ? `img:${img.src}` : `empty:${name}`;
     if (target.dataset.signature === signature) return;
     target.dataset.signature = signature;
-    target.innerHTML = img?.src ? `<img src="${img.src}" alt="${name.replace(/"/g, "&quot;")}">` : `<span>${name === "Producto" ? "SIN FOTO" : name.slice(0, 18)}</span>`;
+    target.innerHTML = img?.src ? `<img loading="lazy" decoding="async" src="${img.src}" alt="${name.replace(/"/g, "&quot;")}">` : `<span>${name === "Producto" ? "SIN FOTO" : name.slice(0, 18)}</span>`;
   }
 
   function ensureCommandBar() {
