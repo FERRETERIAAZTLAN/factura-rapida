@@ -1,0 +1,20 @@
+name: SOLRAK - Kick Release v0.1.97
+
+on:
+  push:
+    branches: [release/v0.1.97-report-detail]
+    paths:
+      - '.github/workflows/kick-release-v0197.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  kick:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Lanzar release corregida
+        run: gh api --method POST "/repos/${{ github.repository }}/actions/workflows/348720041/dispatches" -f ref='release/v0.1.97-report-detail'
