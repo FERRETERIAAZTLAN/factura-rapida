@@ -1,0 +1,20 @@
+name: SOLRAK - Trigger Release v0.1.94 R3
+
+on:
+  push:
+    branches: [release/v0.1.94-hardware]
+    paths:
+      - '.github/workflows/trigger-windows-release-v0194-r3.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ejecutar release Windows v0.1.94 corregido
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run windows-release-v0194-r2.yml --ref release/v0.1.94-hardware
