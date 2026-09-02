@@ -253,7 +253,7 @@ html[data-solrak-sales98-collapsed="1"]{--s98-side:48px;--s95-side:48px}html[dat
 
   function ensureFinishLabel() {
     const finish = byId("fielFinishSale");
-    if (finish && finish.textContent.trim().toUpperCase() !== "FINALIZAR VENTA") finish.textContent = "FINALIZAR VENTA";
+    if (finish && finish.textContent.trim() !== "FINALIZAR VENTA") finish.textContent = "FINALIZAR VENTA";
   }
 
   function mount() {
