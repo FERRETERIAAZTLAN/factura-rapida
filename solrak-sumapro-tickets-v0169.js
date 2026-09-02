@@ -114,7 +114,10 @@
 
   function loadSettings() {
     const key = keyFor(SETTINGS_PREFIX);
-    if (settings && settingsStorageKey === key) return settings;
+    if (settings && settingsStorageKey === key) {
+      if (typeof window.SOLRAKUXV0190?.ticketBarcodeEnabled === "boolean") settings.showBarcode = window.SOLRAKUXV0190.ticketBarcodeEnabled;
+      return settings;
+    }
     const stored = readStored(key) || {};
     settings = {
       ...DEFAULT_SETTINGS,
@@ -123,6 +126,7 @@
       paperSize: String(stored.paperSize || DEFAULT_SETTINGS.paperSize),
       copies: Math.min(2, Math.max(1, Number(stored.copies) || 1)),
     };
+    if (typeof window.SOLRAKUXV0190?.ticketBarcodeEnabled === "boolean") settings.showBarcode = window.SOLRAKUXV0190.ticketBarcodeEnabled;
     settingsStorageKey = key;
     lastReceipt = readStored(keyFor(LAST_RECEIPT_PREFIX));
     return settings;
@@ -473,8 +477,8 @@ html[data-solrak-sumapro-tickets="1"] #tab-timbres{width:min(1120px,100%);margin
       V: "100110101011",
       "*": "100101101101",
     };
-    const normalized = clean(value).toUpperCase().replace(/[^V0-9]/g, "");
-    const bits = `*${normalized || "V000000"}*`
+    const normalized = clean(value).toUpperCase().replace(/[^0-9]/g, "");
+    const bits = `*${normalized || "0"}*`
       .split("")
       .map((char) => patterns[char] || patterns["0"])
       .join("0");
@@ -521,7 +525,7 @@ html[data-solrak-sumapro-tickets="1"] #tab-timbres{width:min(1120px,100%);margin
 
   function receiptMarkup(receipt, currentSettings = loadSettings()) {
     const number = String(receipt?.saleNumber || 0).padStart(6, "0");
-    const barcodeValue = `V${number}`;
+    const barcodeValue = String(receipt?.saleNumber || 0);
     const date = new Date(receipt?.createdAt || Date.now()).toLocaleString(
       "es-MX",
       { dateStyle: "short", timeStyle: "short" },

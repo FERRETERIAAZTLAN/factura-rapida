@@ -6,7 +6,7 @@
     "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/supplier-api";
   const PRODUCT_IMAGE_BASE =
     "https://jojzhohqrshsjmlirkqz.supabase.co/storage/v1/object/public/product-images/";
-  const MAX_TICKETS = 7;
+  const MAX_TICKETS = 8;
   let posState = {
     registers: [],
     openSession: null,
@@ -501,16 +501,20 @@
     resetPayment();
     setTimeout(() => byId("posSearch")?.focus(), 20);
   }
-  function closeTicket(id) {
+  async function closeTicket(id) {
     const t = posTickets.find((x) => x.id === id);
     if (!t) return;
-    if (
-      t.cart.length &&
-      !confirm(
+    if (t.cart.length) {
+      if (!window.SOLRAKDialog?.confirm) {
+        notice("El diálogo seguro todavía no está listo.", true);
+        return;
+      }
+      const accepted = await window.SOLRAKDialog.confirm(
         `¿Cerrar el Ticket #${id}? Se quitarán sus productos sin afectar inventario.`,
-      )
-    )
-      return;
+        { title: "Cerrar ticket", confirmLabel: "Cerrar ticket", danger: true },
+      );
+      if (!accepted) return;
+    }
     if (posTickets.length === 1) {
       t.cart = [];
       t.clientId = "";
@@ -940,12 +944,15 @@
       currentTicket().clientId = byId("posClient").value || "";
     };
     byId("posNewTicket").onclick = newTicket;
-    byId("posClear").onclick = () => {
-      if (
-        posCart.length &&
-        !confirm(`¿Limpiar el Ticket #${currentTicket().id}?`)
-      )
-        return;
+    byId("posClear").onclick = async () => {
+      if (posCart.length) {
+        if (!window.SOLRAKDialog?.confirm) return notice("El diálogo seguro todavía no está listo.", true);
+        const accepted = await window.SOLRAKDialog.confirm(
+          `¿Limpiar el Ticket #${currentTicket().id}?`,
+          { title: "Vaciar ticket", confirmLabel: "Vaciar", danger: true },
+        );
+        if (!accepted) return;
+      }
       posCart = [];
       currentTicket().cart = posCart;
       renderCart();

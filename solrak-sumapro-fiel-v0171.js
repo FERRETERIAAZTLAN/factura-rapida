@@ -585,15 +585,13 @@ html[data-solrak-fiel="1"] #tab-pos aside.summary{position:relative!important;he
   async function cancelActiveSale() {
     const sale = activeSaleDetail?.sale;
     if (!sale) return;
-    const reason = prompt(
-      `Motivo para cancelar el Ticket #${sale.sale_number}:`,
-      "Cancelación solicitada",
-    );
+    const ux = window.SOLRAKUXV0190;
+    if (!ux?.confirmSaleVoid) return notify("El diálogo seguro todavía no está listo.", true);
+    const reason = await ux.confirmSaleVoid(activeSaleDetail);
     if (!clean(reason)) return;
-    if (!confirm("Se restaurará el inventario. ¿Cancelar este ticket?")) return;
     try {
       await posApi("voidSale", { saleId: sale.id, reason: clean(reason) });
-      notify(`Ticket #${sale.sale_number} cancelado e inventario restaurado.`);
+      notify(`Ticket #${sale.sale_number} cancelado.`);
       activeSaleDetail = await posApi("saleDetail", { saleId: sale.id });
       renderSaleDetail();
       await window.FacturaRapidaPOS?.refresh?.();
@@ -723,20 +721,21 @@ html[data-solrak-fiel="1"] #tab-pos aside.summary{position:relative!important;he
 
   async function confirmReturn() {
     if (!activeSaleDetail?.sale) return;
-    const items = returnDraft().map(({ sale_item_id, qty }) => ({
-      sale_item_id,
-      qty,
-    }));
+    const items = returnDraft().map(({ sale_item_id, qty }) => ({ sale_item_id, qty }));
     if (!items.length) return notify("Indica qué cantidad devolver.", true);
-    if (!clean(byId("fielReturnReason").value))
-      return notify("Escribe el motivo de la devolución.", true);
+    const reason = clean(byId("fielReturnReason").value);
+    if (!reason) return notify("Escribe el motivo de la devolución.", true);
+    const refundMethod = byId("fielRefundMethod").value;
+    const ux = window.SOLRAKUXV0190;
+    if (!ux?.confirmReturnImpact) return notify("El diálogo seguro todavía no está listo.", true);
+    if (!(await ux.confirmReturnImpact(activeSaleDetail, items, refundMethod, reason))) return;
     try {
       const result = await posApi("returnSale", {
         saleId: activeSaleDetail.sale.id,
         cashSessionId: window.FacturaRapidaPOS?.state?.openSession?.id || null,
         items,
-        refundMethod: byId("fielRefundMethod").value,
-        reason: byId("fielReturnReason").value,
+        refundMethod,
+        reason,
       });
       notify(`Devolución registrada por ${moneyMx(result.total)}.`);
       await loadReturnTicket();
