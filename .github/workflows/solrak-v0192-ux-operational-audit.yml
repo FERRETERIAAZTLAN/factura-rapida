@@ -28,6 +28,7 @@ jobs:
             echo 'SOLRAK_APPLY_UX_V0192_ALREADY_APPLIED'
           else
             node scripts/apply-ux-v0192.mjs
+            node scripts/apply-ux-v0192-extra.mjs
           fi
       - name: Auditoría UX operativa
         run: node tests/solrak-ux-operational-audit-v0192.mjs
@@ -54,6 +55,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html pos-module.js quotes-email-module.js quotes-module.js solrak-flow-v0173.js solrak-held-tickets-v0176.js solrak-price-verifier-v0177.js solrak-reports-v0172.js solrak-sales-v0174.js solrak-shifts-v0189.js solrak-sumapro-fiel-v0171.js
+          git add index.html pos-module.js quotes-email-module.js quotes-module.js solrak-flow-v0173.js solrak-held-tickets-v0176.js solrak-price-verifier-v0177.js solrak-reports-v0172.js solrak-sales-v0174.js solrak-shifts-v0189.js solrak-sumapro-fiel-v0171.js solrak-caja-cortes-v0185.js solrak-categorias-v0187.js solrak-clients-credit-v0181.js solrak-credit-accounts-v0182.js solrak-inventory-mode-v0188.js solrak-inventory-v0175.js solrak-permissions-v0179.js solrak-product-lifecycle-v0180.js solrak-ui-hardening-v0184.js solrak-ui-operativa-v0183.js
           git commit -m 'SOLRAK v0.1.92: endurecer UX operativa'
           git push origin HEAD:feature/v0.1.92-ux-operational-audit
