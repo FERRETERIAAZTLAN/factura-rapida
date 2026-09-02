@@ -3,9 +3,24 @@ import { chromium } from 'playwright';
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1448, height: 1086 }, deviceScaleFactor: 1 });
+const pageErrors = [];
+const consoleErrors = [];
+page.on('pageerror', (error) => pageErrors.push(String(error?.stack || error)));
+page.on('console', (message) => {
+  if (message.type() === 'error') consoleErrors.push(message.text());
+});
+
 try {
   await page.goto('http://127.0.0.1:4173/tests/fixtures/solrak-sales-suma-v0201.html', { waitUntil: 'networkidle' });
-  await page.waitForSelector('#solrakSalesSumaV0201Workspace', { state: 'visible' });
+  await page.waitForFunction(() => Boolean(window.SOLRAKSalesSumaV0201), null, { timeout: 5000 });
+  await page.evaluate(() => {
+    window.SOLRAKSalesExactV0198?.mount?.();
+    window.SOLRAKSalesPhotoV0199?.mount?.();
+    window.SOLRAKSalesReferenceV0200?.mount?.();
+    window.SOLRAKSalesSumaV0201?.mount?.();
+    window.SOLRAKSalesSumaV0201Tune?.mount?.();
+  });
+  await page.waitForSelector('#solrakSalesSumaV0201Workspace', { state: 'visible', timeout: 5000 });
   await page.waitForTimeout(250);
 
   const geometry = await page.evaluate(() => {
@@ -62,8 +77,12 @@ try {
   }
 
   fs.mkdirSync('artifacts', { recursive: true });
-  fs.writeFileSync('artifacts/solrak-v0201-geometry.json', JSON.stringify(geometry, null, 2));
+  fs.writeFileSync('artifacts/solrak-v0201-geometry.json', JSON.stringify({ ...geometry, pageErrors, consoleErrors }, null, 2));
   await page.screenshot({ path: 'artifacts/solrak-v0201-suma-render.png', fullPage: false });
+  if (pageErrors.length) {
+    console.error('PAGE_ERRORS', JSON.stringify(pageErrors));
+    throw new Error(`El render produjo ${pageErrors.length} error(es) de página`);
+  }
   console.log('SOLRAK_SALES_SUMA_V0201_VISUAL_OK');
 } finally {
   await browser.close();
