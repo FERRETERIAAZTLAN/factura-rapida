@@ -19,4 +19,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run windows-release-v0194-r2.yml -R "$GITHUB_REPOSITORY" --ref release/v0.1.94-hardware
       - name: Confirmar dispatch
-        run: echo "SOLRAK v0.1.94 R4 dispatch solicitado"
+        run: echo "SOLRAK v0.1.94 R5 dispatch solicitado tras corregir ciclo MutationObserver"
