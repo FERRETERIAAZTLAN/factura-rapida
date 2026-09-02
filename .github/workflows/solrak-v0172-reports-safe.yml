@@ -1,0 +1,107 @@
+name: SOLRAK v0.1.72 Reportes Safe Test
+
+on:
+  push:
+    branches: [feature/v0.1.72-reports]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  safe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Integrar cargador v0.1.72 de forma idempotente
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          old = '<script src="solrak-sumapro-fiel-v0171.js?v=1"></script>'
+          new = old + '\n<script src="solrak-reports-v0172.js?v=1"></script>'
+          if 'solrak-reports-v0172.js?v=1' not in text:
+              if old not in text:
+                  raise SystemExit('No se encontró el punto seguro de carga v0.1.71')
+              text = text.replace(old, new, 1)
+              path.write_text(text, encoding='utf-8')
+          if text.count('solrak-reports-v0172.js?v=1') != 1:
+              raise SystemExit('El módulo v0.1.72 quedó duplicado')
+          PY
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias de prueba
+        run: npm install --no-save --no-audit --no-fund jsdom@25
+
+      - name: Validar interfaz Venta y seis reportes
+        run: |
+          set -euo pipefail
+          node --check solrak-reports-v0172.js
+          node --check tests/solrak-reports-v0172-smoke.mjs
+          node tests/solrak-reports-v0172-smoke.mjs
+          grep -q 'solrak-reports-v0172.js?v=1' index.html
+          test "$(grep -o 'solrak-reports-v0172.js?v=1' index.html | wc -l)" -eq 1
+          if grep -qi 'Recargas y Servicios' solrak-reports-v0172.js; then
+            echo 'La opción excluida apareció en v0.1.72' >&2
+            exit 1
+          fi
+
+      - name: Confirmar reportes reales desplegados en pos-api
+        run: |
+          set -euo pipefail
+          ANON_KEY="$(python - <<'PY'
+          import re
+          text=open('index.html',encoding='utf-8').read()
+          m=re.search(r"const ANON_KEY=['\"]([^'\"]+)['\"]", text)
+          if not m: raise SystemExit('No se encontró ANON_KEY')
+          print(m.group(1))
+          PY
+          )"
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${ANON_KEY}" \
+            -H "apikey: ${ANON_KEY}" \
+            -H 'Content-Type: application/json' \
+            -d '{"action":"health"}' \
+            'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/pos-api' > /tmp/pos-health.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const h=JSON.parse(fs.readFileSync('/tmp/pos-health.json','utf8'));
+          const expected=['summary','detail','payments','inventory','movements','best-sellers'];
+          if(!h.ok || !h.reports) throw new Error('pos-api no anuncia reportes reales');
+          for(const kind of expected) if(!h.reportKinds?.includes(kind)) throw new Error('Falta reportKind '+kind);
+          if(h.cfdiUntouched !== true) throw new Error('El contrato no confirma aislamiento CFDI');
+          console.log('SOLRAK_V0172_POS_REPORTS_HEALTH_OK');
+          NODE
+
+      - name: Ejecutar regresiones v0.1.71 y POS
+        run: |
+          set -euo pipefail
+          node tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node tests/solrak-pos-operations-v0171-contract.mjs
+          node tests/pos-module-smoke.mjs
+          node tests/solrak-redesign-v0170-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+
+      - name: Persistir enganche en la rama solo si todo pasó
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/v0.1.72-reports'
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- index.html; then
+            echo 'index.html ya estaba integrado'
+            exit 0
+          fi
+          git config user.name 'SOLRAK Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html
+          git commit -m 'chore: cargar reportes v0.1.72 [skip ci]'
+          git push
