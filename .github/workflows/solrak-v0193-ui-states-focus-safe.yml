@@ -69,5 +69,5 @@ jobs:
         run: |
           ! grep -Eqi 'cfdi-api|finkok' solrak-caja-cortes-v0185.js solrak-clients-credit-v0181.js solrak-categorias-v0187.js solrak-ux-hardening-v0192.js
           ! grep -Eq 'posCloseCash|posCountedCash|solrakCash85CloseTurn|function closeTurn' solrak-caja-cortes-v0185.js
-          grep -q 'MAX_TICKETS=8' solrak-ux-core-v0190.js
+          grep -Eq 'MAX_TICKETS[[:space:]]*=[[:space:]]*8' solrak-ux-core-v0190.js
           grep -q 'Corte automático por franja horaria' solrak-caja-cortes-v0185.js
