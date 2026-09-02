@@ -54,12 +54,12 @@ jobs:
         run: |
           grep -q 'const MAX_TICKETS = 8;' pos-module.js
           grep -Fq 'const barcodeValue = String(receipt?.saleNumber || 0);' solrak-sumapro-tickets-v0169.js
-          ! grep -Eq '\b(confirm|prompt)\s*\(' pos-module.js solrak-sumapro-fiel-v0171.js
+          ! grep -Pq '(^|[^.\w])(confirm|prompt)\s*\(|window\.(confirm|prompt)\s*\(' pos-module.js solrak-sumapro-fiel-v0171.js
           grep -q 'confirmSaleVoid' solrak-sumapro-fiel-v0171.js
           grep -q 'confirmReturnImpact' solrak-sumapro-fiel-v0171.js
           grep -q 'solrak-keyboard-ticket-ux-v0190.js' index.html
           echo 'Referencias nativas restantes en JS raíz:'
-          grep -nE '\b(alert|confirm|prompt)\s*\(' ./*.js || true
+          grep -Pn '(^|[^.\w])(alert|confirm|prompt)\s*\(|window\.(alert|confirm|prompt)\s*\(' ./*.js || true
       - name: Guardas de alcance
         run: |
           ! grep -Eqi 'cfdi-api|finkok' solrak-keyboard-ticket-ux-v0190.js supabase/functions/ticket-ux-api/index.ts
