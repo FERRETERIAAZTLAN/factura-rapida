@@ -1,0 +1,89 @@
+name: SOLRAK v0.1.91 Hardware Windows safe
+
+on:
+  push:
+    branches:
+      - feature/v0.1.91-windows-hardware-bridge
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-hardware:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v0.1.91-windows-hardware-bridge
+          fetch-depth: 0
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Dependencia de pruebas JS
+        shell: pwsh
+        run: npm install --no-save --no-audit --no-fund jsdom@26.1.0
+      - name: Smoke hardware v0.1.91
+        shell: pwsh
+        run: |
+          node --check solrak-hardware-v0191.js
+          node tests/solrak-hardware-v0191-smoke.mjs
+      - name: Reconstruir paquete Tauri base
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Remove-Item native-work -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip native-work -Force
+          if(-not(Test-Path native-work/desktop/src-tauri/src/main.rs)){throw 'No se pudo extraer main.rs'}
+          if(-not(Test-Path native-work/desktop/dist/index.html)){throw 'No se pudo extraer dist/index.html'}
+          node scripts/apply-hardware-v0191.mjs native-work/desktop
+          if(-not(Test-Path native-work/desktop/dist/solrak-hardware-v0191.js)){throw 'No se integró JS hardware'}
+      - name: Cargo check Windows real
+        shell: pwsh
+        run: |
+          Push-Location native-work/desktop/src-tauri
+          cargo generate-lockfile
+          cargo check --locked
+          Pop-Location
+      - name: Guardas de alcance
+        shell: pwsh
+        run: |
+          $js=Get-Content solrak-hardware-v0191.js -Raw
+          $rs=Get-Content desktop-native-v0191/main.rs -Raw
+          if($js -match '(?i)cfdi|finkok|demo|mock'){throw 'Hardware JS invadió alcance o contiene simulación'}
+          if($rs -match '(?i)cfdi|finkok'){throw 'Hardware Rust invadió CFDI/Finkok'}
+          foreach($m in @('list_serial_ports','scale_connect','scale_read','scale_disconnect','list_windows_printers')){if(-not $rs.Contains($m)){throw "Falta comando $m"}}
+          if(-not $rs.Contains('serialport::available_ports()')){throw 'No usa enumeración serial real'}
+          if(-not $rs.Contains('powershell.exe')){throw 'No consulta Windows Print Spooler'}
+      - name: Regresiones de POS recientes
+        shell: pwsh
+        run: |
+          node tests/solrak-ux-core-v0190-smoke.mjs
+          node tests/solrak-shifts-v0189-smoke.mjs
+          node tests/solrak-inventory-mode-v0188-smoke.mjs
+          node tests/solrak-categorias-v0187-smoke.mjs
+          node tests/solrak-formularios-v0186-smoke.mjs
+          node tests/solrak-caja-cortes-v0185-smoke.mjs
+          node tests/solrak-ui-operativa-v0183-smoke.mjs
+          node tests/solrak-held-tickets-v0176-smoke.mjs
+          node tests/pos-module-smoke.mjs
+      - name: Integrar módulo web v0.1.91 en index
+        shell: pwsh
+        run: |
+          $p='index.html';$h=Get-Content $p -Raw;$tag='<script src="solrak-hardware-v0191.js"></script>'
+          if(-not $h.Contains($tag)){$h=$h.Replace('</body>',"$tag`r`n</body>");Set-Content $p $h -Encoding UTF8}
+          if(-not((Get-Content $p -Raw).Contains($tag))){throw 'No se integró hardware v0.1.91 en index'}
+      - name: Persistir integración web
+        shell: pwsh
+        run: |
+          if(git diff --quiet -- index.html){Write-Host 'Integración web ya presente.';exit 0}
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'chore: integrar hardware v0.1.91 en index'
+          git push origin HEAD:feature/v0.1.91-windows-hardware-bridge
