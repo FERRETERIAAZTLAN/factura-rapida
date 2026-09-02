@@ -18,7 +18,7 @@ for (const marker of [
 for (const marker of ['OpenPrinter', 'StartDocPrinter', 'WritePrinter', 'ClosePrinter']) {
   if (!helper.includes(marker)) throw new Error(`Helper WinSpool incompleto: ${marker}`);
 }
-for (const marker of ['solrak-hardware-v0194.js', 'solrak_hardware_v0194.rs', 'SOLRAKHardwareV0194.directPrintEnabled']) {
+for (const marker of ['solrak-hardware-v0194.js', 'solrak_hardware_v0194.rs', 'nativeHardware?.directPrintEnabled?.()']) {
   if (!apply.includes(marker)) throw new Error(`apply-hardware incompleto: ${marker}`);
 }
 if (/\b(?:demo|mock|simulad[oa])\b/i.test(js + rust)) throw new Error('Hardware v0.1.94 contiene simulación o mock');
