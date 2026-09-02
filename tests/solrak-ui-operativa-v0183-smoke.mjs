@@ -21,6 +21,10 @@ const dom = new JSDOM(`<!doctype html><html data-solrak-fiel="1" data-solrak-can
 const { window } = dom;
 window.CSS ||= {};
 window.CSS.escape ||= (v) => String(v).replace(/"/g, '\\"');
+if (window.HTMLDialogElement) {
+  window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+  window.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
+}
 let finish = 0, cleared = 0, discount = 0, quote = 0, switched = "";
 window.document.getElementById("fielFinishSale").onclick = () => finish++;
 window.document.getElementById("posClear").onclick = () => cleared++;
