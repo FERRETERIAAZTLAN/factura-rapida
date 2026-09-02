@@ -1,0 +1,75 @@
+name: SOLRAK - Test Ventas Foto v0.1.99
+
+on:
+  push:
+    branches: [fix/v0.1.99-ventas-foto-exacta]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'solrak-sales-photo-v0199.js'
+      - 'scripts/apply-sales-photo-v0199.mjs'
+      - 'tests/solrak-sales-photo-v0199-*.mjs'
+      - '.github/workflows/test-sales-photo-v0199.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sales-v0199:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar jsdom
+        run: npm install --no-save --no-audit --no-fund --package-lock=false jsdom@26.1.0
+      - name: Sintaxis
+        run: |
+          node --check solrak-suma-sales-v0195.js
+          node --check solrak-common-product-v0196.js
+          node --check solrak-report-detail-v0197.js
+          node --check solrak-sales-exact-v0198.js
+          node --check solrak-sales-photo-v0199.js
+          node --check scripts/apply-sales-photo-v0199.mjs
+      - name: Regresiones previas
+        run: |
+          node tests/solrak-common-product-v0196-smoke.mjs
+          node tests/solrak-report-detail-v0197-smoke.mjs
+          node tests/solrak-report-detail-v0197-visual-contract.mjs
+          node tests/solrak-sales-exact-v0198-smoke.mjs
+          node tests/solrak-sales-exact-v0198-contract.mjs
+      - name: Ventas v0.1.99
+        run: node tests/solrak-sales-photo-v0199-smoke.mjs
+      - name: Integración de paquete
+        shell: bash
+        run: |
+          rm -rf .tmp-v0199
+          mkdir -p .tmp-v0199/dist
+          cat > .tmp-v0199/dist/index.html <<'HTML'
+          <!doctype html><html><body>
+          <script src="solrak-suma-sales-v0195.js"></script>
+          <script src="solrak-common-product-v0196.js"></script>
+          <script src="solrak-report-detail-v0197.js"></script>
+          </body></html>
+          HTML
+          cp solrak-suma-sales-v0195.js .tmp-v0199/dist/
+          cp solrak-common-product-v0196.js .tmp-v0199/dist/
+          cp solrak-report-detail-v0197.js .tmp-v0199/dist/
+          node scripts/apply-sales-exact-v0198.mjs .tmp-v0199
+          node scripts/apply-sales-photo-v0199.mjs .tmp-v0199
+          test -f .tmp-v0199/dist/solrak-sales-photo-v0199.js
+          test "$(grep -o 'solrak-sales-photo-v0199.js' .tmp-v0199/dist/index.html | wc -l)" -eq 1
+          test "$(grep -o 'solrak-sales-exact-v0198.js' .tmp-v0199/dist/index.html | wc -l)" -eq 1
+      - name: Alcance seguro
+        shell: bash
+        run: |
+          if grep -Eqi 'cfdi|finkok|saveProduct|saveInventory|updateProduct|adjustStock|Recargas' solrak-sales-photo-v0199.js; then
+            echo 'Ventas v0.1.99 salió de alcance' >&2
+            exit 1
+          fi
+          grep -Fq -- '--s99-side:228px' solrak-sales-photo-v0199.js
+          grep -Fq -- '--s99-top:58px' solrak-sales-photo-v0199.js
+          grep -Fq -- '--s99-right:220px' solrak-sales-photo-v0199.js
+          echo 'SOLRAK_V0199_SALES_PHOTO_TEST_OK'
