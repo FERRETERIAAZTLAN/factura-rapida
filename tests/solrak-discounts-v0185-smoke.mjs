@@ -37,6 +37,7 @@ assert.equal(window.SOLRAKDiscounts.canDiscount(),true);
 assert.equal(window.SOLRAKDiscounts.applyLineDiscount({lineId:'p1',type:'percent',value:10}),true);
 assert.equal(lines[0].price,90);
 assert.equal(window.SOLRAKDiscounts.manualDiscountAmount(lines[0]),10);
+await new Promise(r=>setTimeout(r,10));
 assert.ok(window.document.querySelector('[data-pos-line="p1"] .solrakManualDiscountBadge'));
 
 await window.fetch('https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/pos-api',{method:'POST',body:JSON.stringify({action:'completeSale',items:[{product_id:'p1',qty:1},{product_id:'p2',qty:2}],payments:[{method:'cash',amount:190}]})});
