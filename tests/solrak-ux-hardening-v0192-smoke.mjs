@@ -10,6 +10,8 @@ const dom = new JSDOM(`<!doctype html><html><head></head><body><section id="tab-
 const { window } = dom;
 window.notice = () => {};
 window.eval(source);
+window.document.dispatchEvent(new window.Event("DOMContentLoaded", { bubbles: true }));
+await new Promise((resolve) => setTimeout(resolve, 0));
 
 if (window.SOLRAKUXV0192?.version !== "0.1.92") throw new Error("No se expuso SOLRAKUXV0192 v0.1.92");
 if (window.document.documentElement.dataset.solrakUx92 !== "1") throw new Error("No se montó la capa UX v0.1.92");
@@ -41,4 +43,4 @@ if ((await cancelPromise) !== false) throw new Error("Cancelación segura debe d
 await new Promise((resolve) => setTimeout(resolve, 0));
 if (window.document.activeElement?.id !== "posSearch") throw new Error("El foco no regresó al buscador POS después del modal");
 
-console.log("SOLRAK_UX_HARDENING_V0192_SMOKE_OK confirm=1 prompt=1 escape=1 focus=1 density=1");
+console.log("SOLRAK_UX_HARDENING_V0192_SMOKE_OK confirm=1 prompt=1 escape=1 focus=1 density=1 domcontentloaded=1");
