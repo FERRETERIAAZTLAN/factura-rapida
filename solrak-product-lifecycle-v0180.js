@@ -8,8 +8,8 @@
 
   function currentSession(){ try{return session||window.session||null}catch{return window.session||null} }
   function anonKey(){ try{return ANON_KEY||window.ANON_KEY||""}catch{return window.ANON_KEY||""} }
-  function productsNow(){ try{return Array.isArray(products)?products:[]}catch{return Array.isArray(window.products)?window.products:[]} }
-  function editingId(){ try{return editingProductId||null}catch{return null} }
+  function productsNow(){ try{return Array.isArray(products)?products:(Array.isArray(window.products)?window.products:[])}catch{return Array.isArray(window.products)?window.products:[]} }
+  function editingId(){ try{return editingProductId||window.editingProductId||null}catch{return window.editingProductId||null} }
 
   function notify(message,error=false){
     try{if(typeof window.notice==="function")return window.notice(message,error)}catch{}
@@ -63,8 +63,8 @@
     try{
       const result=await lifecycleApi("retireProduct",{productId:id});
       byId("productDialog")?.close?.();
-      try{editingProductId=null}catch{}
-      try{if(typeof loadAll==="function")await loadAll()}catch{}
+      try{editingProductId=null}catch{window.editingProductId=null}
+      try{if(typeof loadAll==="function")await loadAll();else if(typeof window.loadAll==="function")await window.loadAll()}catch{}
       annotateInventory();
       if(result.mode==="deactivated")notify("Producto desactivado. Sus ventas y movimientos históricos se conservaron.");
       else notify("Producto eliminado porque no tenía historial operativo.");
