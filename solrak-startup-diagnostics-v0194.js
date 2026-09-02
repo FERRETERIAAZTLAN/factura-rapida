@@ -25,6 +25,35 @@
     };
     return original.call(this,type,wrapped,options);
   };
+
+  const NativeMutationObserver=window.MutationObserver;
+  if(typeof NativeMutationObserver==='function'){
+    let moSeq=0;
+    const WrappedMutationObserver=function(callback){
+      const id=++moSeq;
+      const stack=clean(new Error(`register-mutation-${id}`).stack);
+      let count=0;
+      invoke(`DIAG_MO_REG_${id}`,stack);
+      const wrapped=function(...args){
+        count++;
+        const notable=count<=5||count===10||count===25||count===50||count===100||count===250||count===500||count===1000||count%5000===0;
+        if(notable)invoke(`DIAG_MO_BEGIN_${id}`,`count=${count} readyState=${document.readyState} ${stack}`);
+        try{
+          const result=callback.apply(this,args);
+          if(notable)invoke(`DIAG_MO_END_${id}`,`count=${count} readyState=${document.readyState}`);
+          return result;
+        }catch(error){
+          invoke(`DIAG_MO_ERROR_${id}`,`count=${count} ${clean(error?.stack||error)}`);
+          throw error;
+        }
+      };
+      return new NativeMutationObserver(wrapped);
+    };
+    WrappedMutationObserver.prototype=NativeMutationObserver.prototype;
+    try{Object.defineProperty(WrappedMutationObserver,'name',{value:'MutationObserver'});}catch{}
+    window.MutationObserver=WrappedMutationObserver;
+  }
+
   window.addEventListener('error',e=>invoke('DIAG_WINDOW_ERROR',clean(e?.error?.stack||e?.message||e)));
   window.addEventListener('unhandledrejection',e=>invoke('DIAG_REJECTION',clean(e?.reason?.stack||e?.reason)));
   const snapshot=()=>{
