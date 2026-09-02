@@ -14,6 +14,7 @@ const uiOperativaPath = resolve(dist, 'solrak-ui-operativa-v0183.js');
 const shiftsPath = resolve(dist, 'solrak-shifts-v0189.js');
 
 await copyFile(resolve(root, 'solrak-hardware-v0194.js'), resolve(dist, 'solrak-hardware-v0194.js'));
+await copyFile(resolve(root, 'solrak-suma-sales-v0195.js'), resolve(dist, 'solrak-suma-sales-v0195.js'));
 await copyFile(resolve(root, 'desktop-native-v0194', 'solrak_hardware_v0194.rs'), resolve(src, 'solrak_hardware_v0194.rs'));
 await copyFile(resolve(root, 'desktop-native-v0194', 'solrak_raw_print_helper_v0194.cs'), resolve(src, 'solrak_raw_print_helper_v0194.cs'));
 
@@ -54,9 +55,14 @@ await writeFile(mainPath, main, 'utf8');
 
 let index = await readFile(indexPath, 'utf8');
 const scriptTag = '<script src="solrak-hardware-v0194.js"></script>';
+const salesScriptTag = '<script src="solrak-suma-sales-v0195.js"></script>';
 if (!index.includes(scriptTag)) {
   if (!index.includes('</body>')) throw new Error('dist/index.html: no se encontró </body>');
   index = index.replace('</body>', `${scriptTag}\n</body>`);
+}
+if (!index.includes(salesScriptTag)) {
+  if (!index.includes('</body>')) throw new Error('dist/index.html: no se encontró </body> para UI v0.1.95');
+  index = index.replace('</body>', `${salesScriptTag}\n</body>`);
 }
 await writeFile(indexPath, index, 'utf8');
 
@@ -120,7 +126,7 @@ await writeFile(shiftsPath, shifts, 'utf8');
 
 for (const [file, markers] of [
   [mainPath, ['HardwareStateV0194', 'print_raw_ticket_v0194', 'scale_read_v0194']],
-  [indexPath, ['solrak-hardware-v0194.js']],
+  [indexPath, ['solrak-hardware-v0194.js', 'solrak-suma-sales-v0195.js']],
   [ticketsPath, [directMarker]],
   [uiOperativaPath, [startupGuardMarker, 'SYNC_OBSERVER_OPTIONS', 'syncObserver = new MutationObserver(scheduleSync)']],
   [shiftsPath, [shiftsStartupGuardMarker, 'status&&status.textContent!=="Corte automático por horario"']],
@@ -129,4 +135,4 @@ for (const [file, markers] of [
   for (const marker of markers) if (!text.includes(marker)) throw new Error(`${file}: falta ${marker}`);
 }
 
-console.log('APPLY HARDWARE v0.1.94 OK: RAW/ESC-POS, spooler Windows, báscula COM, escáner teclado y arranque WebView sin realimentación MutationObserver.');
+console.log('APPLY HARDWARE v0.1.94 + VENTAS v0.1.95 OK: hardware real y pantalla de ventas SOLRAK tipo escritorio integrada.');
