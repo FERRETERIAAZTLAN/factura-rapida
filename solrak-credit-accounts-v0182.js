@@ -11,7 +11,7 @@
   function currentSession(){try{return session||window.session||null}catch{return window.session||null}}
   function anonKey(){try{return ANON_KEY||window.ANON_KEY||""}catch{return window.ANON_KEY||""}}
   function isAdmin(){return currentSession()?.user?.role==="admin"}
-  function notify(message,error=false){try{if(typeof window.notice==="function")return window.notice(message,error)}catch{} if(error)window.alert?.(message)}
+  function notify(message,error=false){try{if(typeof window.notice==="function")return window.notice(message,error)}catch{} console[error?"error":"info"]("SOLRAK",message)}
 
   async function api(action,payload={}){
     const key=anonKey(),token=currentSession()?.token||"";
@@ -127,8 +127,10 @@
   }
 
   async function voidPayment(movementId){
-    const reason=window.prompt?.("Motivo para cancelar este abono:","Abono capturado por error");if(!String(reason||"").trim())return;
-    if(window.confirm?.("La cancelación restaurará la deuda y, si fue efectivo, retirará ese importe de la caja abierta. ¿Continuar?")===false)return;
+    const movement=(state.history?.movements||[]).find((row)=>row.id===movementId)||null;
+    const reason=await window.SOLRAKUXV0192?.prompt?.({title:'Cancelar abono',message:'La cancelación se registrará como movimiento compensatorio; el abono original permanecerá en el historial.',label:'Motivo',value:'Abono capturado por error',required:true,maxlength:240,confirmText:'Continuar · Enter'});if(!String(reason||'').trim())return;
+    const cash=movement?.payment_method==='cash';
+    const accepted=await window.SOLRAKUXV0192?.confirm?.({title:'Confirmar cancelación de abono',message:`Importe del abono: ${money(movement?.amount||0)}.`,detail:cash?'Se restaurará la deuda y el servidor validará que exista saldo suficiente para retirar el efectivo de la caja técnica abierta.':'Se restaurará la deuda mediante un movimiento compensatorio. El historial original no se borra.',danger:true,confirmText:'Cancelar abono · Enter'});if(!accepted)return;
     try{await api("voidPayment",{movementId,reason:String(reason).trim()});notify("Abono cancelado mediante movimiento compensatorio; no se borró el historial.");await loadSummary();if(state.selectedClientId)await selectClient(state.selectedClientId,document.querySelector(`[data-solrak-credit-client="${state.selectedClientId}"]`))}catch(error){notify(error.message,true)}
   }
 

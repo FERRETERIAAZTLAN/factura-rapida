@@ -40,7 +40,7 @@
 
   function notice(message, error = false) {
     if (typeof window.notice === "function") window.notice(message, error);
-    else if (error) window.alert(message);
+    else console[error ? "error" : "info"]("SOLRAK", message);
   }
 
   function injectStyle() {

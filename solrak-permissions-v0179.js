@@ -35,7 +35,7 @@
 
   function notice(message,error=false){
     try{if(typeof window.notice==="function")return window.notice(message,error)}catch{}
-    if(error)window.alert?.(message);
+    console[error?"error":"info"]("SOLRAK",message);
   }
 
   function can(permission){ return isAdmin() || state.permissions?.[permission]===true; }

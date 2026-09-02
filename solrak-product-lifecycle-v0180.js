@@ -13,7 +13,7 @@
 
   function notify(message,error=false){
     try{if(typeof window.notice==="function")return window.notice(message,error)}catch{}
-    if(error)window.alert?.(message);
+    console[error?"error":"info"]("SOLRAK",message);
   }
 
   async function lifecycleApi(action,payload={}){
@@ -56,8 +56,8 @@
     if(!id)return;
     const product=productsNow().find((row)=>row.id===id);
     const name=product?.name||"este producto";
-    const ok=window.confirm?.(`¿Dar de baja ${name}?\n\nSi tiene historial, SOLRAK lo desactivará y conservará todas sus ventas y movimientos. Solo se eliminará físicamente si nunca tuvo historial.`);
-    if(ok===false)return;
+    const ok=await window.SOLRAKUXV0192?.confirm?.({title:'Dar de baja producto',message:`¿Dar de baja ${name}?`,detail:'Si tiene historial, SOLRAK lo desactivará y conservará ventas y movimientos. Solo se eliminará físicamente si el servidor verifica que nunca tuvo historial.',danger:true,confirmText:'Dar de baja · Enter'});
+    if(!ok)return;
     const button=byId("deleteProduct");
     if(button)button.disabled=true;
     try{

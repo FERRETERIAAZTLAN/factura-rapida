@@ -102,7 +102,7 @@
 
   function notify(message, error = false) {
     if (typeof window.notice === "function") window.notice(message, error);
-    else if (error) window.alert(message);
+    else console[error ? "error" : "info"]("SOLRAK", message);
   }
 
   async function posApi(action, payload = {}) {
@@ -583,24 +583,10 @@ html[data-solrak-fiel="1"] #tab-pos aside.summary{position:relative!important;he
   }
 
   async function cancelActiveSale() {
-    const sale = activeSaleDetail?.sale;
-    if (!sale) return;
-    const reason = prompt(
-      `Motivo para cancelar el Ticket #${sale.sale_number}:`,
-      "Cancelación solicitada",
-    );
-    if (!clean(reason)) return;
-    if (!confirm("Se restaurará el inventario. ¿Cancelar este ticket?")) return;
-    try {
-      await posApi("voidSale", { saleId: sale.id, reason: clean(reason) });
-      notify(`Ticket #${sale.sale_number} cancelado e inventario restaurado.`);
-      activeSaleDetail = await posApi("saleDetail", { saleId: sale.id });
-      renderSaleDetail();
-      await window.FacturaRapidaPOS?.refresh?.();
-      await loadTicketList();
-    } catch (error) {
-      notify(error.message, true);
+    if (typeof window.SOLRAKUXV0190?.cancelSelectedSale === "function") {
+      return window.SOLRAKUXV0190.cancelSelectedSale();
     }
+    notify("La confirmación segura de cancelación todavía no está disponible.", true);
   }
 
   function receiptFromDetail(data) {

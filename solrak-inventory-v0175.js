@@ -61,7 +61,7 @@
     try {
       if (typeof notice === "function") return notice(message, error);
     } catch {}
-    if (error) window.alert?.(message);
+    console[error ? "error" : "info"]("SOLRAK", message);
   }
 
   function showDialog(dialog) {

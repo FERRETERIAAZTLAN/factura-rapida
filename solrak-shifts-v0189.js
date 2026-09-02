@@ -11,7 +11,7 @@
   function currentSession(){try{return session||window.session||null}catch{return window.session||null}}
   function anonKey(){try{return ANON_KEY||window.ANON_KEY||""}catch{return window.ANON_KEY||""}}
   function admin(){return currentSession()?.user?.role==="admin"}
-  function notify(message,error=false){try{if(typeof notice==="function")return notice(message,error)}catch{};if(error)window.alert?.(message)}
+  function notify(message,error=false){try{if(typeof notice==="function")return notice(message,error)}catch{};console[error?"error":"info"]("SOLRAK",message)}
   function show(dialog){try{dialog.showModal()}catch{dialog.setAttribute("open","")}}
   function close(dialog){try{dialog.close()}catch{dialog.removeAttribute("open")}}
 

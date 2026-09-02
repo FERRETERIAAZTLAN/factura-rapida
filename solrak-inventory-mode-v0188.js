@@ -9,7 +9,7 @@
   function currentSession(){try{return session||window.session||null}catch{return window.session||null}}
   function anonKey(){try{return ANON_KEY||window.ANON_KEY||""}catch{return window.ANON_KEY||""}}
   function admin(){return currentSession()?.user?.role==="admin"}
-  function notify(message,error=false){try{if(typeof notice==="function")return notice(message,error)}catch{};if(error)window.alert?.(message)}
+  function notify(message,error=false){try{if(typeof notice==="function")return notice(message,error)}catch{};console[error?"error":"info"]("SOLRAK",message)}
 
   async function api(action,payload={}){
     const key=anonKey(),token=currentSession()?.token||"";
@@ -58,8 +58,8 @@
   async function changeMode(enabled,toggle){
     if(!admin()){if(toggle)toggle.checked=state.enabled;return}
     if(!enabled){
-      const ok=window.confirm?.("¿Activar Modo sin Inventario?\n\nLas nuevas ventas NO descontarán stock hasta que vuelvas a activar el seguimiento. Las ventas seguirán siendo reales y quedarán registradas.");
-      if(ok===false){if(toggle)toggle.checked=true;return}
+      const ok=await window.SOLRAKUXV0192?.confirm?.({title:'Activar Modo sin Inventario',message:'Las nuevas ventas seguirán siendo reales, pero NO descontarán existencias.',detail:'Cada renglón conservará inventory_applied=false para que cancelaciones y devoluciones futuras no inventen restauraciones de stock.',danger:true,confirmText:'Activar modo · Enter'});
+      if(!ok){if(toggle)toggle.checked=true;return}
     }
     if(toggle)toggle.disabled=true;
     try{const result=await api("setMode",{enabled});state.enabled=result.inventoryTrackingEnabled!==false;state.loaded=true;render();notify(state.enabled?"Seguimiento de inventario activado.":"Modo sin Inventario activado. Las nuevas ventas no descontarán stock.")}
