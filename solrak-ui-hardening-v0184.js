@@ -9,7 +9,7 @@
   function pos(){ return window.FacturaRapidaPOS || null; }
   function notify(message,error=false){
     try{ if(typeof window.notice === "function") return window.notice(message,error); }catch{}
-    if(error) window.alert?.(message);
+    console[error?"error":"info"]("SOLRAK",message);
   }
   function money(value){
     try{ if(typeof window.money === "function") return window.money(value); }catch{}

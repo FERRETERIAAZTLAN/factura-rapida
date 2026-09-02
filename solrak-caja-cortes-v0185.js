@@ -12,7 +12,7 @@
   function session(){try{return window.session||null}catch{return null}}
   function anonKey(){try{return window.ANON_KEY||ANON_KEY||""}catch{return window.ANON_KEY||""}}
   function pos(){return window.FacturaRapidaPOS||null}
-  function notice(message,error=false){if(typeof window.notice==="function")window.notice(message,error);else if(error)window.alert?.(message)}
+  function notice(message,error=false){if(typeof window.notice==="function")window.notice(message,error);else console[error?"error":"info"]("SOLRAK",message)}
   function show(dialog){if(!dialog)return;try{dialog.showModal()}catch{dialog.setAttribute("open","")}}
   function close(dialog){if(!dialog)return;try{dialog.close()}catch{dialog.removeAttribute("open")}}
 

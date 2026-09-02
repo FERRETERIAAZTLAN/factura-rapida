@@ -11,7 +11,7 @@
   function anonKey(){try{return ANON_KEY||window.ANON_KEY||""}catch{return window.ANON_KEY||""}}
   function isAdmin(){return currentSession()?.user?.role==="admin"}
   function productsNow(){try{return Array.isArray(products)?products:(window.products||[])}catch{return window.products||[]}}
-  function notify(message,error=false){try{if(typeof notice==="function")return notice(message,error)}catch{};if(error)window.alert?.(message)}
+  function notify(message,error=false){try{if(typeof notice==="function")return notice(message,error)}catch{};console[error?"error":"info"]("SOLRAK",message)}
 
   async function api(action,payload={}){
     const key=anonKey(),token=currentSession()?.token||"";
@@ -76,7 +76,7 @@
   async function setActive(button){
     const id=Number(button.dataset.solrakCategoryActive),active=button.dataset.nextActive==="1";
     const category=state.categories.find(c=>c.id===id);if(!category)return;
-    if(!active&&window.confirm?.(`¿Desactivar la categoría #${id} ${category.name}?\n\nNo se eliminará y su ID quedará reservado.`)===false)return;
+    if(!active){const accepted=await window.SOLRAKUXV0192?.confirm?.({title:'Desactivar categoría',message:`¿Desactivar la categoría #${id} ${category.name}?`,detail:'No se eliminará. Su ID quedará reservado y el servidor impedirá desactivarla si conserva productos activos.',danger:true,confirmText:'Desactivar · Enter'});if(!accepted)return;}
     button.disabled=true;
     try{await api("setCategoryActive",{categoryId:id,active});await refresh();notify(active?"Categoría activada.":"Categoría desactivada sin borrar su ID.")}catch(error){notify(error.message,true)}finally{button.disabled=false}
   }

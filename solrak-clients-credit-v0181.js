@@ -12,7 +12,7 @@
   function currentSession(){try{return session||window.session||null}catch{return window.session||null}}
   function anonKey(){try{return ANON_KEY||window.ANON_KEY||""}catch{return window.ANON_KEY||""}}
   function isAdmin(){return currentSession()?.user?.role==="admin"}
-  function notify(message,error=false){try{if(typeof window.notice==="function")return window.notice(message,error)}catch{} if(error)window.alert?.(message)}
+  function notify(message,error=false){try{if(typeof window.notice==="function")return window.notice(message,error)}catch{} console[error?"error":"info"]("SOLRAK",message)}
 
   async function api(action,payload={}){
     const key=anonKey(),token=currentSession()?.token||"";
@@ -80,7 +80,7 @@
     card.querySelectorAll("[data-solrak-client-active]").forEach((button)=>button.onclick=async()=>{
       const id=button.dataset.solrakClientActive,next=button.dataset.nextActive==="1";
       const client=state.clients.find((row)=>row.id===id);
-      if(!next&&window.confirm?.(`¿Dar de baja a ${client?.name||'este cliente'}?\n\nSe conservará todo su historial.`)===false)return;
+      if(!next){const accepted=await window.SOLRAKUXV0192?.confirm?.({title:'Dar de baja cliente',message:`¿Dar de baja a ${client?.name||'este cliente'}?`,detail:'Se conservarán ventas, facturas, abonos y saldo. Solo se bloquearán nuevas operaciones que requieran un cliente activo.',danger:true,confirmText:'Dar de baja · Enter'});if(!accepted)return;}
       button.disabled=true;
       try{await api("setClientActive",{clientId:id,active:next});try{if(typeof loadAll==="function")await loadAll();else if(typeof window.loadAll==="function")await window.loadAll()}catch{};notify(next?"Cliente activado.":"Cliente dado de baja sin borrar su historial.");await refreshManagement()}
       catch(error){notify(error.message,true)}finally{button.disabled=false}

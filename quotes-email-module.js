@@ -22,7 +22,7 @@ async function sendQuoteEmail(id){
     const formEmail=normalizeEmail(byId('quoteCustomerEmail')?.value||'');
     if(formEmail&&emailOk(formEmail))recipient=formEmail;
     else{
-      recipient=normalizeEmail(prompt('Correo del cliente','')||'');
+      recipient=normalizeEmail((await window.SOLRAKUXV0192?.prompt?.({title:'Enviar cotización',message:'La cotización no tiene un correo guardado.',label:'Correo del cliente',type:'email',placeholder:'cliente@correo.com',required:true,confirmText:'Usar correo · Enter'}))||'');
       if(!recipient)return;
       if(!emailOk(recipient))return notice('Escribe un correo válido para enviar la cotización.',true);
     }

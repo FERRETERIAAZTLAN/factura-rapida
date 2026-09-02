@@ -19,7 +19,7 @@
   function pos() { return window.FacturaRapidaPOS || null; }
   function notify(message, error = false) {
     if (typeof window.notice === "function") window.notice(message, error);
-    else if (error) window.alert?.(message);
+    else console[error ? "error" : "info"]("SOLRAK", message);
   }
   function safeStoreGet(key, fallback = "") { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
   function safeStoreSet(key, value) { try { localStorage.setItem(key, String(value)); } catch {} }

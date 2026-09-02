@@ -127,9 +127,9 @@
     pos.id = "tab-pos";
     pos.className = "tab-panel hidden";
     pos.innerHTML = `
-<div class="frPosTop"><div><p class="eyebrow">VENTA / CAJA</p><h2 style="margin:0">Punto de venta</h2><div class="frPosHint">Escanea, busca y mantén hasta ${MAX_TICKETS} tickets abiertos. El inventario se descuenta únicamente al confirmar el cobro.</div></div><div class="actions"><span id="posCashState" class="frPosState">Caja cerrada</span><button id="posOpenCash" class="primary compact" type="button">Abrir caja</button><button id="posCloseCash" class="secondary compact hidden" type="button">Cerrar caja</button></div></div>
+<div class="frPosTop"><div><p class="eyebrow">VENTA / CAJA</p><h2 style="margin:0">Punto de venta</h2><div class="frPosHint">Escanea, busca y mantén hasta ${MAX_TICKETS} tickets abiertos. El inventario se descuenta únicamente al confirmar el cobro.</div></div></div>
 <div class="frTicketBar"><div id="posTickets" style="display:flex;gap:6px"></div><button id="posNewTicket" class="frTicketNew" type="button">＋ Nuevo ticket</button></div>
-<div class="frPosGrid"><div class="stack"><article class="card"><div class="card-head"><h2>Buscar producto</h2><span class="muted small" id="posProductMeta">0 disponibles</span></div><div class="frPosSearch"><input id="posSearch" class="field" autocomplete="off" placeholder="Escanea código o escribe producto…"><div class="frPosHint">Enter agrega la coincidencia exacta o el primer resultado.</div></div><div id="posResults" class="frPosResults"></div></article><article class="card frPosCartCard"><div class="card-head"><h2 id="posCartTitle">Ticket #1</h2><button id="posClear" class="ghost compact" type="button">Limpiar ticket</button></div><label>Cliente (opcional)<select id="posClient" class="field"><option value="">Público general</option></select></label><div class="frPosCartHead"><span>Código</span><span>Producto</span><span>Cantidad</span><span>Precio</span><span>Importe</span></div><div id="posCart" class="frPosCart"></div></article><article class="card"><div class="card-head"><h2>Ventas recientes</h2><button id="posRefresh" class="secondary compact" type="button">Actualizar</button></div><div id="posRecent" class="frRecent"></div></article></div><aside class="card summary"><div class="card-head"><h2>Venta actual</h2><span id="posTicketBadge" class="badge">Ticket #1</span></div><div id="posProductPreview" class="frPreview"><div class="frPreviewEmpty">Selecciona o agrega un producto para ver su imagen.</div></div><div class="frPosTotals"><div><span>Subtotal</span><strong id="posSubtotal">$0.00</strong></div><div><span>IVA</span><strong id="posIva">$0.00</strong></div><div class="frPosGrand"><span>Total</span><strong id="posTotal">$0.00</strong></div></div><button id="posCharge" class="primary full" type="button">Abrir caja para cobrar</button><div id="posReceipt"></div></aside></div>`;
+<div class="frPosGrid"><div class="stack"><article class="card"><div class="card-head"><h2>Buscar producto</h2><span class="muted small" id="posProductMeta">0 disponibles</span></div><div class="frPosSearch"><input id="posSearch" class="field" autocomplete="off" placeholder="Escanea código o escribe producto…"><div class="frPosHint">Enter agrega la coincidencia exacta o el primer resultado.</div></div><div id="posResults" class="frPosResults"></div></article><article class="card frPosCartCard"><div class="card-head"><h2 id="posCartTitle">Ticket #1</h2><button id="posClear" class="ghost compact" type="button">Limpiar ticket</button></div><label>Cliente (opcional)<select id="posClient" class="field"><option value="">Público general</option></select></label><div class="frPosCartHead"><span>Código</span><span>Producto</span><span>Cantidad</span><span>Precio</span><span>Importe</span></div><div id="posCart" class="frPosCart"></div></article><article class="card"><div class="card-head"><h2>Ventas recientes</h2><button id="posRefresh" class="secondary compact" type="button">Actualizar</button></div><div id="posRecent" class="frRecent"></div></article></div><aside class="card summary"><div class="card-head"><h2>Venta actual</h2><span id="posTicketBadge" class="badge">Ticket #1</span></div><div id="posProductPreview" class="frPreview"><div class="frPreviewEmpty">Selecciona o agrega un producto para ver su imagen.</div></div><div class="frPosTotals"><div><span>Subtotal</span><strong id="posSubtotal">$0.00</strong></div><div><span>IVA</span><strong id="posIva">$0.00</strong></div><div class="frPosGrand"><span>Total</span><strong id="posTotal">$0.00</strong></div></div><button id="posCharge" class="primary full" type="button">Finalizar venta</button><div id="posReceipt"></div></aside></div>`;
     const suppliersSec = document.createElement("section");
     suppliersSec.id = "tab-proveedores";
     suppliersSec.className = "tab-panel hidden";
@@ -137,16 +137,6 @@
     const firstPanel = host.querySelector(".tab-panel");
     host.insertBefore(pos, firstPanel);
     host.insertBefore(suppliersSec, firstPanel);
-    const openDlg = document.createElement("dialog");
-    openDlg.id = "posOpenDialog";
-    openDlg.className = "frPosDialog";
-    openDlg.innerHTML = `<div class="frPosDialogInner"><div class="card-head"><h2>Abrir caja</h2><button class="ghost" type="button" data-pos-close="posOpenDialog">×</button></div><label>Caja<select id="posRegister" class="field"></select></label><label style="margin-top:10px">Fondo inicial<input id="posOpeningAmount" class="field" type="number" min="0" step="0.01" value="0"></label><button id="posConfirmOpen" class="primary full" type="button">Abrir caja</button></div>`;
-    document.body.appendChild(openDlg);
-    const closeDlg = document.createElement("dialog");
-    closeDlg.id = "posCloseDialog";
-    closeDlg.className = "frPosDialog";
-    closeDlg.innerHTML = `<div class="frPosDialogInner"><div class="card-head"><h2>Cerrar caja</h2><button class="ghost" type="button" data-pos-close="posCloseDialog">×</button></div><label>Efectivo contado<input id="posCountedCash" class="field" type="number" min="0" step="0.01"></label><label style="margin-top:10px">Notas<textarea id="posCloseNotes" class="field" rows="3"></textarea></label><button id="posConfirmClose" class="primary full" type="button">Calcular y cerrar</button></div>`;
-    document.body.appendChild(closeDlg);
     const payDlg = document.createElement("dialog");
     payDlg.id = "posPayDialog";
     payDlg.className = "frPosDialog frPayDialog";
@@ -501,16 +491,20 @@
     resetPayment();
     setTimeout(() => byId("posSearch")?.focus(), 20);
   }
-  function closeTicket(id) {
+  async function closeTicket(id) {
     const t = posTickets.find((x) => x.id === id);
     if (!t) return;
-    if (
-      t.cart.length &&
-      !confirm(
-        `¿Cerrar el Ticket #${id}? Se quitarán sus productos sin afectar inventario.`,
-      )
-    )
-      return;
+    if (t.cart.length) {
+      const total = ticketTotals(t).total;
+      const accepted = await window.SOLRAKUXV0192?.confirm?.({
+        title: `Cerrar Ticket #${id}`,
+        message: `Se quitarán ${t.cart.length} renglón(es) del ticket en espera.`,
+        detail: `Importe visible ${mx(total)}. No se ha cobrado: inventario, caja y crédito no cambian.`,
+        danger: true,
+        confirmText: "Cerrar ticket · Enter",
+      });
+      if (!accepted) return;
+    }
     if (posTickets.length === 1) {
       t.cart = [];
       t.clientId = "";
@@ -606,8 +600,8 @@
     if (!b) return;
     const t = totals().total;
     if (!posState.openSession) {
-      b.textContent = "Abrir caja para cobrar";
-      b.classList.add("frSaleDisabled");
+      b.textContent = "Preparar cobro";
+      b.classList.remove("frSaleDisabled");
       return;
     }
     if (!posCart.length) {
@@ -618,9 +612,17 @@
     b.textContent = `Finalizar venta · ${mx(t)}`;
     b.classList.remove("frSaleDisabled");
   }
-  function openPayment() {
+  async function openPayment() {
     if (!posState.openSession) {
-      notice("Abre la caja antes de cobrar.", true);
+      try {
+        await window.SOLRAKFlowV0173?.ensureOperationalSession?.();
+      } catch (error) {
+        notice(error?.message || "No se pudo preparar la sesión técnica de caja.", true);
+        return;
+      }
+    }
+    if (!posState.openSession) {
+      notice("No se pudo preparar la sesión técnica de caja.", true);
       return;
     }
     if (!posCart.length) {
@@ -652,8 +654,6 @@
           })
         : "Caja cerrada";
     }
-    byId("posOpenCash")?.classList.toggle("hidden", !!open);
-    byId("posCloseCash")?.classList.toggle("hidden", !open);
     const regs = byId("posRegister");
     if (regs)
       regs.innerHTML = (posState.registers || [])
@@ -940,17 +940,23 @@
       currentTicket().clientId = byId("posClient").value || "";
     };
     byId("posNewTicket").onclick = newTicket;
-    byId("posClear").onclick = () => {
-      if (
-        posCart.length &&
-        !confirm(`¿Limpiar el Ticket #${currentTicket().id}?`)
-      )
-        return;
+    byId("posClear").onclick = async () => {
+      if (posCart.length) {
+        const accepted = await window.SOLRAKUXV0192?.confirm?.({
+          title: `Vaciar Ticket #${currentTicket().id}`,
+          message: `Se quitarán ${posCart.length} renglón(es) del ticket actual.`,
+          detail: `Importe visible ${mx(totals().total)}. No se modificará inventario porque la venta no está finalizada.`,
+          danger: true,
+          confirmText: "Vaciar ticket · Enter",
+        });
+        if (!accepted) return;
+      }
       posCart = [];
       currentTicket().cart = posCart;
       renderCart();
       renderTickets();
       renderProductPreview(null);
+      setTimeout(() => byId("posSearch")?.focus(), 0);
     };
     document.querySelectorAll("[data-pay-card]").forEach((card) => {
       card.onclick = (event) => {
@@ -978,49 +984,6 @@
     byId("posCharge").onclick = openPayment;
     byId("posConfirmCharge").onclick = charge;
     byId("posRefresh").onclick = refreshPos;
-    byId("posOpenCash").onclick = () => byId("posOpenDialog").showModal();
-    byId("posCloseCash").onclick = () => byId("posCloseDialog").showModal();
-    byId("posConfirmOpen").onclick = async () => {
-      busy(true);
-      try {
-        const r = await posApi("openCash", {
-          registerId: byId("posRegister").value,
-          openingAmount: Number(byId("posOpeningAmount").value) || 0,
-        });
-        byId("posOpenDialog").close();
-        posState.openSession = r.session;
-        await refreshPos();
-        notice("Caja abierta. Ya puedes cobrar ventas.");
-        setTimeout(() => byId("posSearch")?.focus(), 20);
-      } catch (e) {
-        notice(e.message, true);
-      } finally {
-        busy(false);
-      }
-    };
-    byId("posConfirmClose").onclick = async () => {
-      busy(true);
-      try {
-        const r = await posApi("closeCash", {
-          cashSessionId: posState.openSession?.id,
-          countedCash: Number(byId("posCountedCash").value) || 0,
-          notes: byId("posCloseNotes").value.trim(),
-        });
-        byId("posCloseDialog").close();
-        byId("posCountedCash").value = "";
-        byId("posCloseNotes").value = "";
-        posState.openSession = null;
-        await refreshPos();
-        showCut(r.session || {});
-        notice(
-          `Caja cerrada. Esperado ${mx(r.session.expected_cash)} · Contado ${mx(r.session.counted_cash)} · Diferencia ${mx(r.session.difference)}.`,
-        );
-      } catch (e) {
-        notice(e.message, true);
-      } finally {
-        busy(false);
-      }
-    };
     byId("supplierSearch").oninput = renderSuppliers;
     byId("supplierNew").onclick = resetSupplier;
     byId("supplierCancel").onclick = resetSupplier;
