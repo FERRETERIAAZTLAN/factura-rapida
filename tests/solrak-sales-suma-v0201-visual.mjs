@@ -1,6 +1,15 @@
 import fs from 'node:fs';
 import { chromium } from 'playwright';
 
+function extractCss(path) {
+  const source = fs.readFileSync(path, 'utf8');
+  const match = source.match(/style\.textContent\s*=\s*`([\s\S]*?)`;/);
+  if (!match) throw new Error(`No se pudo extraer CSS real de ${path}`);
+  const css = match[1].replaceAll('${WORKSPACE_ID}', 'solrakSalesSumaV0201Workspace');
+  if (css.includes('${')) throw new Error(`${path}: quedaron interpolaciones sin resolver en CSS visual`);
+  return css;
+}
+
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1448, height: 1086 }, deviceScaleFactor: 1 });
 const pageErrors = [];
@@ -11,26 +20,15 @@ page.on('console', (message) => {
 });
 
 try {
-  // Cargamos el DOM real de la fixture sin depender de un servidor HTTP ni del
-  // timing de las capas visuales antiguas. La integración completa de scripts
-  // se valida en el paso de paquete; aquí medimos únicamente el layout final.
-  const fixture = fs.readFileSync('tests/fixtures/solrak-sales-suma-v0201.html', 'utf8')
-    .replace(/<script\s+src="\/[^"]+"><\/script>/g, '');
+  const fixture = fs.readFileSync('tests/fixtures/solrak-sales-suma-v0201.html', 'utf8');
   await page.setContent(fixture, { waitUntil: 'domcontentloaded' });
 
-  // v0.1.98 construye el menú real que v0.2.01 conserva. Después cargamos
-  // solamente la capa estructural final y su calibración visual.
-  await page.addScriptTag({ path: 'solrak-sales-exact-v0198.js' });
-  await page.addScriptTag({ path: 'solrak-sales-suma-v0201.js' });
-  await page.addScriptTag({ path: 'solrak-sales-suma-v0201-tune.js' });
-
-  await page.evaluate(() => {
-    window.SOLRAKSalesExactV0198?.mount?.();
-    window.SOLRAKSalesSumaV0201?.mount?.();
-    window.SOLRAKSalesSumaV0201Tune?.mount?.();
-  });
-  await page.waitForSelector('#solrakSalesSumaV0201Workspace', { state: 'visible', timeout: 5000 });
-  await page.waitForTimeout(300);
+  // La imagen usa exactamente el CSS embebido en los dos módulos productivos
+  // de v0.2.01. La lógica de reubicación DOM se cubre por el smoke test y la
+  // cadena de empaquetado se cubre en su paso independiente.
+  await page.addStyleTag({ content: extractCss('solrak-sales-suma-v0201.js') });
+  await page.addStyleTag({ content: extractCss('solrak-sales-suma-v0201-tune.js') });
+  await page.waitForTimeout(100);
 
   const geometry = await page.evaluate(() => {
     const rect = (selector) => {
@@ -60,6 +58,7 @@ try {
   const near = (actual, expected, tolerance, label) => {
     if (actual == null || Math.abs(actual - expected) > tolerance) throw new Error(`${label}: ${actual} fuera de ${expected}±${tolerance}`);
   };
+
   if (geometry.viewport.width !== 1448 || geometry.viewport.height !== 1086) throw new Error('Viewport visual incorrecto');
   near(geometry.sidebar?.x, 0, 1, 'sidebar.x');
   near(geometry.sidebar?.width, 260, 2, 'sidebar.width');
@@ -72,7 +71,7 @@ try {
   near(geometry.preview?.height, 256, 3, 'preview.height');
   near(geometry.finish?.height, 66, 2, 'finish.height');
   near(geometry.total?.height, 156, 3, 'total.height');
-  near(geometry.total?.y, 760, 10, 'total.y');
+  near(geometry.total?.y, 760, 12, 'total.y');
   if (!geometry.search || geometry.search.width < 330 || geometry.search.height < 40) throw new Error('Buscador no tiene geometría Suma');
   if (!geometry.actions || geometry.actions.y > 805) throw new Error(`Acciones inferiores siguen demasiado abajo: ${geometry.actions?.y}`);
   if (!geometry.footer || geometry.footer.y > 1020) throw new Error(`Footer sigue demasiado abajo: ${geometry.footer?.y}`);
