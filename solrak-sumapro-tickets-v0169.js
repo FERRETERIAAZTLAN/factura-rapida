@@ -521,7 +521,7 @@ html[data-solrak-sumapro-tickets="1"] #tab-timbres{width:min(1120px,100%);margin
 
   function receiptMarkup(receipt, currentSettings = loadSettings()) {
     const number = String(receipt?.saleNumber || 0).padStart(6, "0");
-    const barcodeValue = `V${number}`;
+    const barcodeValue = number;
     const date = new Date(receipt?.createdAt || Date.now()).toLocaleString(
       "es-MX",
       { dateStyle: "short", timeStyle: "short" },

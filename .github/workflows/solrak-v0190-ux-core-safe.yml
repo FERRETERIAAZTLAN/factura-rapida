@@ -1,0 +1,118 @@
+name: SOLRAK v0.1.90 UX escritorio safe
+
+on:
+  push:
+    branches:
+      - feature/v0.1.90-keyboard-density-modals
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v0.1.90-keyboard-density-modals
+          fetch-depth: 0
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Dependencia de pruebas
+        run: npm install --no-save jsdom@26.1.0
+      - name: Alinear legado con especificación v0.1.90
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          pos=Path('pos-module.js')
+          s=pos.read_text(encoding='utf-8')
+          old='const MAX_TICKETS = 7;'
+          new='const MAX_TICKETS = 8;'
+          if old in s:
+              s=s.replace(old,new,1)
+              pos.write_text(s,encoding='utf-8')
+          elif new not in s:
+              raise SystemExit('No se encontró el límite esperado de multiticket')
+
+          ticket=Path('solrak-sumapro-tickets-v0169.js')
+          s=ticket.read_text(encoding='utf-8')
+          old='const barcodeValue = `V${number}`;'
+          new='const barcodeValue = number;'
+          if old in s:
+              s=s.replace(old,new,1)
+              ticket.write_text(s,encoding='utf-8')
+          elif new not in s:
+              raise SystemExit('No se encontró la construcción del código de barras del ticket')
+
+          ux=Path('solrak-ux-core-v0190.js')
+          s=ux.read_text(encoding='utf-8')
+          old='window.SOLRAKHeldTicketsV0176?.newTicket?.() || pos()?.newTicket?.();'
+          new='window.SOLRAKHeldTicketsV0176?.newTicket ? window.SOLRAKHeldTicketsV0176.newTicket() : pos()?.newTicket?.();'
+          if old in s:
+              s=s.replace(old,new)
+              ux.write_text(s,encoding='utf-8')
+          if old in ux.read_text(encoding='utf-8'):
+              raise SystemExit('Quedó fallback que podría saltarse el límite de 8 tickets')
+          PY
+      - name: Smoke v0.1.90 UX escritorio
+        run: node tests/solrak-ux-core-v0190-smoke.mjs
+      - name: Regresiones recientes
+        run: |
+          node tests/solrak-shifts-v0189-smoke.mjs
+          node tests/solrak-inventory-mode-v0188-smoke.mjs
+          node tests/solrak-categorias-v0187-smoke.mjs
+          node tests/solrak-formularios-v0186-smoke.mjs
+          node tests/solrak-caja-cortes-v0185-smoke.mjs
+          node tests/solrak-ui-hardening-v0184-smoke.mjs
+          node tests/solrak-ui-operativa-v0183-smoke.mjs
+          node tests/solrak-credit-accounts-v0182-smoke.mjs
+          node tests/solrak-clients-credit-v0181-smoke.mjs
+          node tests/solrak-product-lifecycle-v0180-smoke.mjs
+          node tests/solrak-permissions-v0179-smoke.mjs
+          node tests/solrak-price-verifier-v0177-smoke.mjs
+          node tests/solrak-held-tickets-v0176-smoke.mjs
+          node tests/solrak-inventory-v0175-smoke.mjs
+          node tests/solrak-sales-v0174-smoke.mjs
+          node tests/solrak-flow-v0173-smoke.mjs
+          node tests/solrak-reports-v0172-smoke.mjs
+          node tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+          node tests/pos-module-smoke.mjs
+      - name: Guardas de alcance y UX
+        run: |
+          grep -q 'const VERSION = "0.1.90"' solrak-ux-core-v0190.js
+          grep -q 'const MAX_TICKETS = 8' solrak-ux-core-v0190.js
+          grep -q 'const MAX_TICKETS = 8;' pos-module.js
+          grep -q 'const barcodeValue = number;' solrak-sumapro-tickets-v0169.js
+          grep -q 'event.key === "F12"' solrak-ux-core-v0190.js
+          grep -q 'solrak:pos-sale-complete' solrak-ux-core-v0190.js
+          grep -q 'inventory_applied' solrak-ux-core-v0190.js
+          grep -q 'No hay registros' solrak-ux-core-v0190.js
+          ! grep -Eq '\b(alert|confirm|prompt)[[:space:]]*\(' solrak-ux-core-v0190.js
+          ! grep -Eqi 'cfdi-api|finkok|completeSale' solrak-ux-core-v0190.js
+      - name: Integrar módulo v0.1.90 en index
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html');s=p.read_text(encoding='utf-8')
+          tag='<script src="solrak-ux-core-v0190.js"></script>'
+          if tag not in s:
+              if '</body>' not in s: raise SystemExit('index.html no contiene </body>')
+              s=s.replace('</body>',tag+'\n</body>',1)
+              p.write_text(s,encoding='utf-8')
+          PY
+          grep -q '<script src="solrak-ux-core-v0190.js"></script>' index.html
+      - name: Persistir integración v0.1.90
+        run: |
+          if git diff --quiet -- index.html pos-module.js solrak-sumapro-tickets-v0169.js solrak-ux-core-v0190.js; then echo 'Integración ya presente.'; exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html pos-module.js solrak-sumapro-tickets-v0169.js solrak-ux-core-v0190.js
+          git commit -m 'chore: integrar UX escritorio v0.1.90'
+          git push origin HEAD:feature/v0.1.90-keyboard-density-modals
