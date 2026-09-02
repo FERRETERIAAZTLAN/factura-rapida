@@ -1,0 +1,88 @@
+name: SOLRAK v0.1.73 - Caja simple y pantalla completa
+
+on:
+  push:
+    branches:
+      - feature/v0.1.73-caja-fullscreen
+    paths:
+      - solrak-flow-v0173.js
+      - tests/solrak-flow-v0173-smoke.mjs
+      - .github/workflows/solrak-v0173-flow-safe.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate-integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Dependencia de pruebas
+        run: npm install --no-save --no-audit --no-fund jsdom@25
+
+      - name: Smoke v0.1.73 caja simple y fullscreen
+        run: node tests/solrak-flow-v0173-smoke.mjs
+
+      - name: Regresiones POS Venta Reportes Tickets
+        run: |
+          node tests/solrak-reports-v0172-smoke.mjs
+          node tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node tests/solrak-pos-operations-v0171-contract.mjs
+          node tests/pos-module-smoke.mjs
+          node tests/solrak-redesign-v0170-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+
+      - name: Guardas fiscales y de alcance
+        shell: bash
+        run: |
+          if grep -Eiq 'cfdi-api|finkok|Recargas y Servicios' solrak-flow-v0173.js; then
+            echo 'El módulo v0.1.73 tocó un área prohibida' >&2
+            exit 1
+          fi
+          grep -q 'ensureOperationalSession' solrak-flow-v0173.js
+          grep -q 'height:100vh!important' solrak-flow-v0173.js
+          grep -q 'background:#f4c400!important' solrak-flow-v0173.js
+
+      - name: Integrar módulo v0.1.73 en index
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'index.html';
+          let html = fs.readFileSync(path, 'utf8');
+          const tag = '<script src="solrak-flow-v0173.js?v=1"></script>';
+          if (!html.includes('solrak-flow-v0173.js')) {
+            const anchor = '<script src="solrak-reports-v0172.js?v=1"></script>';
+            if (html.includes(anchor)) html = html.replace(anchor, `${anchor}\n${tag}`);
+            else html = html.replace(/<\/body>/i, `${tag}\n</body>`);
+            fs.writeFileSync(path, html);
+          }
+          const final = fs.readFileSync(path, 'utf8');
+          if (!final.includes(tag)) throw new Error('No se integró solrak-flow-v0173.js');
+          if (final.indexOf('solrak-flow-v0173.js') < final.indexOf('solrak-reports-v0172.js'))
+            throw new Error('v0.1.73 debe cargar después de v0.1.72');
+          console.log('SOLRAK_V0173_INDEX_OK');
+          NODE
+
+      - name: Persistir integración en la rama
+        shell: bash
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'index.html ya contiene v0.1.73'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Integrar SOLRAK v0.1.73 en index'
+          git push origin HEAD:feature/v0.1.73-caja-fullscreen
