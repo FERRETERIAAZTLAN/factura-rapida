@@ -35,7 +35,6 @@ window.FacturaRapidaPOS = {
 };
 
 window.eval(source);
-window.clearInterval(1);
 assert.equal(window.SOLRAKHeldTicketsV0175.version, "0.1.75");
 assert.equal(window.SOLRAKHeldTicketsV0175.maxTickets, 8);
 assert.match(window.SOLRAKHeldTicketsV0175.storageKey(), /AZTLAN:user-1/);
@@ -96,4 +95,5 @@ assert.equal(restored.cart[1].name, "Bolsa");
 assert.ok(rerenders > 0);
 assert.ok(refreshes > 0);
 
+window.close();
 console.log("SOLRAK v0.1.75 held tickets / 8 tickets smoke OK");
