@@ -204,8 +204,14 @@
     });
   }
 
+  function userRow(userId) {
+    return [...document.querySelectorAll("[data-solrak-perm-user]")].find(
+      (row) => row.dataset.solrakPermUser === userId,
+    ) || null;
+  }
+
   async function saveRow(userId, button) {
-    const row = document.querySelector(`[data-solrak-perm-user="${CSS.escape(userId)}"]`);
+    const row = userRow(userId);
     if (!row) return;
     const permissions = {};
     Object.keys(LABELS).forEach((key) => {
