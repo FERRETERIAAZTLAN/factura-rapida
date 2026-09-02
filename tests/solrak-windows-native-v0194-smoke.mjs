@@ -31,7 +31,13 @@ assert.ok(!/Finkok|CFDI/i.test(js + rust), 'hardware no debe tocar CFDI/Finkok')
 assert.ok(js.includes('/^\\d+$/'), 'folio directo debe ser estrictamente numérico');
 assert.ok(js.includes('`{B${exactFolio}`'), 'Code128 debe usar el folio numérico exacto');
 assert.ok(!js.includes('padStart('), 'hardware no debe rellenar el folio con ceros');
-assert.ok(peripherals.includes('keyboard'), 'se preserva el lector como teclado USB');
+assert.ok(
+  peripherals.includes('installScannerContract') &&
+  peripherals.includes('byId("posSearch")') &&
+  peripherals.includes('addEventListener("keydown"') &&
+  peripherals.includes('event.key !== "Enter"'),
+  'se preserva el lector USB como entrada de teclado con Enter en el buscador del POS',
+);
 
 const store = new Map();
 const localStorage = {
