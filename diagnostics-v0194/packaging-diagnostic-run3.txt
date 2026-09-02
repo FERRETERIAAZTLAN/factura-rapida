@@ -1,0 +1,30 @@
+RUN=33616500812
+HEAD=88fe6e03b9eb95c56f86e7395fab2f583e97d665
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:1:﻿2026-09-02T09:53:03.2776692Z ##[group]Run $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:2:2026-09-02T09:53:03.2777494Z [36;1m$ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true[0m
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:4:2026-09-02T09:53:03.2778640Z [36;1mif($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1'}[0m
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:6:2026-09-02T09:53:03.2779603Z [36;1mif($sha -ne $env:FR_FIX1_SHA256){throw "FIX1 hash inesperado $sha"}[0m
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:11:2026-09-02T09:53:03.2781405Z [36;1mnpm install --no-audit --no-fund[0m
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:15:2026-09-02T09:53:03.2783250Z [36;1mif((Get-Item production-source.html).Length -lt 10000){throw 'UI productiva incompleta'}[0m
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:51:2026-09-02T09:53:03.2812964Z [36;1mnode tests/audit-external-startup-resources.mjs desktop/dist/index.html --require-zero[0m
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:88:2026-09-02T09:53:15.4915940Z file:///D:/a/factura-rapida/factura-rapida/tests/audit-external-startup-resources.mjs:14
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:89:2026-09-02T09:53:15.4919726Z if (requireZero && refs.length) throw new Error(`El HTML todavía depende de ${refs.length} recurso(s) externo(s) durante el arranque.`);
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:92:2026-09-02T09:53:15.4921875Z Error: El HTML todavía depende de 1 recurso(s) externo(s) durante el arranque.
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:93:2026-09-02T09:53:15.4923051Z     at file:///D:/a/factura-rapida/factura-rapida/tests/audit-external-startup-resources.mjs:14:39
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:96:2026-09-02T09:53:15.6311772Z [31;1mNativeCommandExitException: [0mD:\a\_temp\e1b2db9b-cc71-4e89-a93e-a02423f55bb3.ps1:51[0m
+runlogs/diagnose/5_Reconstruir paquete productivo con instrumentaci├│n.txt:98:2026-09-02T09:53:15.6314268Z [31;1m[0m[36;1m[36;1m  51 | [0m [36;1mnode tests/audit-external-startup-resources.mjs desktop/dist/index.ht[0m …[0m
+runlogs/diagnose/2_Run actions_checkout@v4.txt:102:2026-09-02T09:52:51.4411189Z  * [new branch]      feature/v0.1.92-ux-operational-audit -> origin/feature/v0.1.92-ux-operational-audit
+runlogs/0_diagnose.txt:134:2026-09-02T09:52:51.4411195Z  * [new branch]      feature/v0.1.92-ux-operational-audit -> origin/feature/v0.1.92-ux-operational-audit
+runlogs/0_diagnose.txt:461:2026-09-02T09:53:03.2776722Z ##[group]Run $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
+runlogs/0_diagnose.txt:462:2026-09-02T09:53:03.2777498Z [36;1m$ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true[0m
+runlogs/0_diagnose.txt:464:2026-09-02T09:53:03.2778642Z [36;1mif($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1'}[0m
+runlogs/0_diagnose.txt:466:2026-09-02T09:53:03.2779605Z [36;1mif($sha -ne $env:FR_FIX1_SHA256){throw "FIX1 hash inesperado $sha"}[0m
+runlogs/0_diagnose.txt:471:2026-09-02T09:53:03.2781408Z [36;1mnpm install --no-audit --no-fund[0m
+runlogs/0_diagnose.txt:475:2026-09-02T09:53:03.2783252Z [36;1mif((Get-Item production-source.html).Length -lt 10000){throw 'UI productiva incompleta'}[0m
+runlogs/0_diagnose.txt:511:2026-09-02T09:53:03.2812966Z [36;1mnode tests/audit-external-startup-resources.mjs desktop/dist/index.html --require-zero[0m
+runlogs/0_diagnose.txt:548:2026-09-02T09:53:15.4915959Z file:///D:/a/factura-rapida/factura-rapida/tests/audit-external-startup-resources.mjs:14
+runlogs/0_diagnose.txt:549:2026-09-02T09:53:15.4919745Z if (requireZero && refs.length) throw new Error(`El HTML todavía depende de ${refs.length} recurso(s) externo(s) durante el arranque.`);
+runlogs/0_diagnose.txt:552:2026-09-02T09:53:15.4921883Z Error: El HTML todavía depende de 1 recurso(s) externo(s) durante el arranque.
+runlogs/0_diagnose.txt:553:2026-09-02T09:53:15.4923060Z     at file:///D:/a/factura-rapida/factura-rapida/tests/audit-external-startup-resources.mjs:14:39
+runlogs/0_diagnose.txt:556:2026-09-02T09:53:15.6311818Z [31;1mNativeCommandExitException: [0mD:\a\_temp\e1b2db9b-cc71-4e89-a93e-a02423f55bb3.ps1:51[0m
+runlogs/0_diagnose.txt:558:2026-09-02T09:53:15.6314274Z [31;1m[0m[36;1m[36;1m  51 | [0m [36;1mnode tests/audit-external-startup-resources.mjs desktop/dist/index.ht[0m …[0m
