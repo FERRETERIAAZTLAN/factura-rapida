@@ -17,7 +17,8 @@ function walk(dir) {
 walk(root);
 
 const findings = [];
-const nativeDialog = /\b(?:window\.)?(alert|confirm|prompt)(?:\?\.)?\s*\(/g;
+// Detecta únicamente APIs nativas globales (alert/confirm/prompt y window.*), no métodos SOLRAK como SOLRAKUXV0192.confirm().
+const nativeDialog = /(?<![\w$.])(?:window\.)?(alert|confirm|prompt)(?:\?\.)?\s*\(/g;
 for (const file of files) {
   const source = fs.readFileSync(file, "utf8");
   const rel = path.relative(root, file).replaceAll("\\", "/");
