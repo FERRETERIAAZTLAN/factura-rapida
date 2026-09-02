@@ -1,0 +1,133 @@
+name: SOLRAK v0.1.94 Windows hardware native
+
+on:
+  push:
+    branches:
+      - feature/v0.1.94-windows-hardware-native
+  pull_request:
+    paths:
+      - 'solrak-hardware-v0194.js'
+      - 'solrak-sumapro-tickets-v0169.js'
+      - 'index.html'
+      - 'scripts/apply-hardware-web-v0194.mjs'
+      - 'scripts/patch-windows-hardware-v0194.mjs'
+      - 'tests/solrak-hardware-v0194-smoke.mjs'
+      - '.github/workflows/solrak-v0194-windows-hardware-native.yml'
+
+permissions:
+  contents: write
+
+env:
+  FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
+  FR_FIX1_SHA256: "144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134"
+
+jobs:
+  windows-hardware-native:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Dependencias smoke
+        shell: pwsh
+        run: npm install --no-save --no-audit --no-fund jsdom@26.1.0
+
+      - name: Sintaxis y aplicar integración web
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node --check solrak-hardware-v0194.js
+          node --check scripts/apply-hardware-web-v0194.mjs
+          node --check scripts/patch-windows-hardware-v0194.mjs
+          node scripts/apply-hardware-web-v0194.mjs
+          node --check solrak-sumapro-tickets-v0169.js
+          $html=Get-Content index.html -Raw
+          if(-not $html.Contains('<script src="solrak-hardware-v0194.js"></script>')){throw 'index no carga hardware v0.1.94'}
+          $tickets=Get-Content solrak-sumapro-tickets-v0169.js -Raw
+          foreach($m in @('SOLRAKHardwareV0194','printWithBrowser','__SOLRAK_TEST_PRINT__')){if(-not $tickets.Contains($m)){throw "Integración ticket incompleta: $m"}}
+
+      - name: Smokes hardware y regresiones POS
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node tests/solrak-hardware-v0194-smoke.mjs
+          node tests/solrak-peripherals-v0191-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+          node tests/solrak-v0193-ui-states-focus-smoke.mjs
+          node tests/solrak-ux-operational-audit-v0192.mjs
+          node tests/solrak-ux-hardening-v0192-smoke.mjs
+          node tests/pos-module-smoke.mjs
+          node tests/solrak-caja-cortes-v0185-smoke.mjs
+          node tests/solrak-shifts-v0189-smoke.mjs
+          node tests/solrak-v0164-cash-report-contract.mjs
+
+      - name: Reconstruir escritorio Windows estable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cmd /c "git show $env:FR_FIX1_COMMIT`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1'}
+          $sha=(Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne $env:FR_FIX1_SHA256){throw "FIX1 hash inesperado $sha"}
+          Expand-Archive FIX1.zip . -Force
+          if(-not(Test-Path desktop/src-tauri/src/main.rs)){throw 'FIX1 no reconstruyó desktop/src-tauri/src/main.rs'}
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          node scripts/patch-windows-hardware-v0194.mjs desktop
+
+      - name: Auditar puente nativo generado
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $main=Get-Content desktop/src-tauri/src/main.rs -Raw
+          $hw=Get-Content desktop/src-tauri/src/hardware_v0194.rs -Raw
+          $cargo=Get-Content desktop/src-tauri/Cargo.toml -Raw
+          foreach($m in @('mod hardware_v0194;','HardwareState::default','hardware_v0194::print_ticket','hardware_v0194::scale_connect','hardware_v0194::list_windows_printers')){if(-not $main.Contains($m)){throw "main nativo incompleto: $m"}}
+          foreach($m in @('serialport::new','serialport::available_ports','StartDocPrinter','WritePrinter','pDataType = "RAW"','CODE128','0x1D, 0x6B, 73','scale_read','barcode_value')){if(-not $hw.Contains($m)){throw "hardware nativo incompleto: $m"}}
+          foreach($m in @('serialport =','base64 =','serde_json =')){if(-not $cargo.Contains($m)){throw "Cargo sin dependencia: $m"}}
+          if($hw -match 'weight\s*:\s*Some\(0(?:\.0+)?\)'){throw 'Se detectó peso sintético cero en código productivo'}
+          if($hw -match 'fake|mock weight|simulat'){throw 'Se detectó marcador de simulación en hardware productivo'}
+          if($hw -match 'V000|V77'){throw 'Se detectó prefijo V en folio/código productivo'}
+          Write-Host 'SOLRAK_NATIVE_HARDWARE_STATIC_OK rawSpooler=true serial=true exactBarcode=true noFakeWeight=true'
+
+      - name: Compilar y probar Rust nativo
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Push-Location desktop/src-tauri
+          cargo test
+          cargo check
+          Pop-Location
+
+      - name: Guardas de alcance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $changed=(git diff --name-only HEAD)
+          foreach($path in $changed){
+            if($path -like 'supabase/*'){throw "v0.1.94 tocó Supabase: $path"}
+          }
+          $web=Get-Content solrak-hardware-v0194.js -Raw
+          if($web -match 'cfdi-api|finkok|completeSale'){throw 'v0.1.94 invadió CFDI/Finkok/completeSale'}
+          if(-not (Select-String -Path pos-module.js -Pattern 'const MAX_TICKETS = 8;' -Quiet)){throw 'Regresó límite distinto de 8 tickets'}
+          Write-Host 'SOLRAK_V0194_SCOPE_OK noSupabase=true noCfdi=true maxTickets=8'
+
+      - name: Persistir integración web validada
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html solrak-sumapro-tickets-v0169.js
+          git diff --cached --quiet
+          if($LASTEXITCODE -eq 0){Write-Host 'Integración ya persistida'; exit 0}
+          git commit -m 'feat: activar hardware Windows nativo v0.1.94'
+          git push origin HEAD:feature/v0.1.94-windows-hardware-native
