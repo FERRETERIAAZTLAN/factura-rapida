@@ -60,4 +60,5 @@ assert.equal(sent.args.job.barcode,true);
 assert.match(sent.args.job.text,/TICKET DE VENTA #123/);
 assert.doesNotMatch(sent.args.job.text,/TICKET DE VENTA #000123/);
 
+window.close();
 console.log("SOLRAK v0.1.92 native peripherals smoke: OK");
