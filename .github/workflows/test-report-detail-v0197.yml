@@ -1,0 +1,63 @@
+name: SOLRAK - Test Reporte Ventas v0.1.97
+
+on:
+  push:
+    branches: [fix/v0.1.97-reporte-ventas-suma]
+    paths:
+      - 'solrak-report-detail-v0197.js'
+      - 'tests/solrak-report-detail-v0197-smoke.mjs'
+      - 'scripts/apply-report-detail-v0197.mjs'
+      - '.github/workflows/test-report-detail-v0197.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'solrak-report-detail-v0197.js'
+      - 'tests/solrak-report-detail-v0197-smoke.mjs'
+      - 'scripts/apply-report-detail-v0197.mjs'
+      - '.github/workflows/test-report-detail-v0197.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar JSDOM
+        run: npm install --no-save --no-audit --no-fund --package-lock=false jsdom@26.1.0
+      - name: Sintaxis
+        run: |
+          node --check solrak-report-detail-v0197.js
+          node --check tests/solrak-report-detail-v0197-smoke.mjs
+          node --check scripts/apply-report-detail-v0197.mjs
+      - name: Smoke funcional del reporte
+        run: node tests/solrak-report-detail-v0197-smoke.mjs
+      - name: Contrato de empaquetado Windows
+        run: |
+          rm -rf /tmp/solrak97 && mkdir -p /tmp/solrak97/dist
+          cat > /tmp/solrak97/dist/index.html <<'HTML'
+          <!doctype html><body><script src="solrak-reports-v0172.js"></script><script src="solrak-suma-sales-v0195.js"></script><script src="solrak-common-product-v0196.js"></script></body>
+          HTML
+          node scripts/apply-report-detail-v0197.mjs /tmp/solrak97
+          grep -q 'solrak-report-detail-v0197.js' /tmp/solrak97/dist/index.html
+          test -f /tmp/solrak97/dist/solrak-report-detail-v0197.js
+          echo SOLRAK_V0197_PACKAGE_CONTRACT_OK
+      - name: Regresión Producto Común v0.1.96
+        run: node tests/solrak-common-product-v0196-smoke.mjs
+      - name: Regresión pantalla de ventas v0.1.95
+        run: node tests/solrak-suma-sales-v0195-smoke.mjs
+      - name: Alcance seguro
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const s=fs.readFileSync('solrak-report-detail-v0197.js','utf8');
+          if(/\bdemo\b|\bmock\b|simulad[oa]|finkok|cfdi|saveProduct|stock\s*=|price\s*=/i.test(s)) throw new Error('Reporte v0.1.97 salió del alcance visual/lectura');
+          for(const marker of ['Reporte de Ventas','Resumen','Totales','Periodo','Detalle de Ventas','HOY','ESTE MES','ESTE AÑO','Total Ventas Netas','Total Ganancias','Pr. Costo','Pr. Mayr.','Pr. Pub.']) if(!s.includes(marker)) throw new Error('Falta '+marker);
+          console.log('SOLRAK_V0197_SCOPE_OK');
+          NODE
