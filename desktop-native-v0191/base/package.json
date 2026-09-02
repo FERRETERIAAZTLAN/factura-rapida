@@ -1,0 +1,14 @@
+{
+  "name": "factura-rapida-desktop",
+  "private": true,
+  "version": "0.1.4",
+  "scripts": {
+    "sync-web": "node scripts/sync-web.mjs",
+    "set-version": "node scripts/set-version.mjs",
+    "tauri": "tauri",
+    "build:windows": "npm run sync-web && tauri build --bundles nsis"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.3"
+  }
+}

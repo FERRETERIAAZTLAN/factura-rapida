@@ -1,0 +1,19 @@
+[package]
+name = "factura-rapida"
+version = "0.1.4"
+description = "Factura Rápida para Windows"
+authors = ["Factura Rápida"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2.11.3", features = [] }
+tauri-plugin-updater = "2"
+url = "2"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
