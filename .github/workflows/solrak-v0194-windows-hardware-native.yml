@@ -1,15 +1,116 @@
-name: SOLRAK v0.1.94 Windows hardware native (superseded)
-
-# La validación autoritativa de v0.1.94 es:
-# .github/workflows/solrak-v0194-hardware-native-safe.yml
-# Este archivo queda sin ejecución automática para conservar trazabilidad de runs históricos.
+name: SOLRAK v0.1.94 Windows hardware native
 
 on:
+  push:
+    branches:
+      - feature/v0.1.94-windows-hardware-final
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'solrak-hardware-v0194.js'
+      - 'desktop-native-v0194/**'
+      - 'scripts/apply-hardware-v0194.mjs'
+      - 'tests/solrak-hardware-v0194-smoke.mjs'
+      - '.github/workflows/solrak-v0194-windows-hardware-native.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
+  FR_FIX1_SHA256: "144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134"
+
 jobs:
-  superseded:
-    if: ${{ false }}
+  windows-hardware-native:
     runs-on: windows-latest
+    timeout-minutes: 35
     steps:
-      - run: echo "Superseded by solrak-v0194-hardware-native-safe.yml"
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Dependencias de prueba
+        shell: pwsh
+        run: npm install --no-save --no-audit --no-fund jsdom@26.1.0
+      - name: Sintaxis y smoke hardware v0.1.94
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node --check solrak-hardware-v0194.js
+          node --check scripts/apply-hardware-v0194.mjs
+          node tests/solrak-hardware-v0194-smoke.mjs
+      - name: Compilar helper WinSpool real
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Add-Type -Path desktop-native-v0194/solrak_raw_print_helper_v0194.cs
+          if(-not ('SolrakRawPrinter' -as [type])){throw 'No compiló SolrakRawPrinter'}
+          'WIN_SPOOL_HELPER_COMPILE_OK'
+      - name: Reconstruir escritorio Windows estable y aplicar v0.1.94
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Remove-Item desktop -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item FIX1.zip -Force -ErrorAction SilentlyContinue
+          cmd /c "git show $env:FR_FIX1_COMMIT`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1 desde el commit estable'}
+          $sha=(Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne $env:FR_FIX1_SHA256){throw "FIX1 hash inesperado $sha"}
+          Expand-Archive FIX1.zip . -Force
+          if(-not(Test-Path desktop/src-tauri/src/main.rs)){throw 'FIX1 no reconstruyó desktop/src-tauri/src/main.rs'}
+          if(-not(Test-Path desktop/dist)){throw 'FIX1 no reconstruyó desktop/dist'}
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          Copy-Item index.html desktop/dist/index.html -Force
+          Get-ChildItem -Path . -File -Filter '*.js' | ForEach-Object { Copy-Item $_.FullName (Join-Path 'desktop/dist' $_.Name) -Force }
+          node scripts/apply-hardware-v0194.mjs desktop
+          node scripts/apply-hardware-v0194.mjs desktop
+          if(-not(Test-Path desktop/dist/solrak-hardware-v0194.js)){throw 'No se integró hardware JS'}
+          if(-not(Test-Path desktop/src-tauri/src/solrak_hardware_v0194.rs)){throw 'No se integró hardware Rust'}
+      - name: Cargo test y check Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Push-Location desktop/src-tauri
+          cargo generate-lockfile
+          cargo test --locked
+          cargo check --locked
+          Pop-Location
+      - name: Contrato de integración nativa
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $main=Get-Content desktop/src-tauri/src/main.rs -Raw
+          $module=Get-Content desktop/src-tauri/src/solrak_hardware_v0194.rs -Raw
+          $tickets=Get-Content desktop/dist/solrak-sumapro-tickets-v0169.js -Raw
+          $index=Get-Content desktop/dist/index.html -Raw
+          foreach($m in @('hardware_status_v0194','list_serial_ports_v0194','scale_connect_v0194','scale_read_v0194','scale_disconnect_v0194','list_windows_printers_v0194','print_raw_ticket_v0194')){if(-not $main.Contains($m)){throw "main.rs no registra $m"}}
+          foreach($m in @('serialport::available_ports()','powershell.exe','RAW_PRINT_HELPER')){if(-not $module.Contains($m)){throw "bridge Rust no contiene $m"}}
+          if(-not $tickets.Contains('nativeHardware?.directPrintEnabled?.()')){throw 'Tickets no usan impresión directa v0.1.94'}
+          if(-not $index.Contains('solrak-hardware-v0194.js')){throw 'index Windows no carga hardware v0.1.94'}
+          if(($module + (Get-Content solrak-hardware-v0194.js -Raw)) -match '(?i)cfdi|finkok|\bdemo\b|\bmock\b|simulad[oa]'){throw 'Hardware v0.1.94 invadió alcance o contiene simulación'}
+          if(($module + (Get-Content solrak-hardware-v0194.js -Raw)) -match 'weight\s*[:=]\s*(?:Some\()?0(?:\.0+)?\)?'){throw 'Se detectó peso sintético cero en hardware productivo'}
+          if(-not (Select-String -Path pos-module.js -Pattern 'const MAX_TICKETS = 8;' -Quiet)){throw 'Regresó límite distinto de 8 tickets'}
+          'SOLRAK_NATIVE_HARDWARE_CONTRACT_OK'
+      - name: Regresiones POS y UX
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node tests/solrak-hardware-v0194-smoke.mjs
+          node tests/solrak-peripherals-v0191-smoke.mjs
+          node tests/solrak-v0193-ui-states-focus-smoke.mjs
+          node tests/solrak-ux-operational-audit-v0192.mjs
+          node tests/solrak-ux-hardening-v0192-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+          node tests/solrak-shifts-v0189-smoke.mjs
+          node tests/solrak-caja-cortes-v0185-smoke.mjs
+          node tests/solrak-held-tickets-v0176-smoke.mjs
+          node tests/solrak-v0164-cash-report-contract.mjs
+          node tests/pos-module-smoke.mjs
