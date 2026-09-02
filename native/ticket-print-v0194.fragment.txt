@@ -1,0 +1,70 @@
+  // SOLRAK_NATIVE_PRINTER_V0194
+  function centerThermal(text, width) {
+    const value = clean(text);
+    if (!value || value.length >= width) return value;
+    return " ".repeat(Math.max(0, Math.floor((width - value.length) / 2))) + value;
+  }
+
+  function nativeTicketPayload(receipt, currentSettings) {
+    const folio = String(receipt?.saleNumber || 0).padStart(6, "0");
+    const width = currentSettings.paperSize === "80" ? 48 : 32;
+    const rule = "-".repeat(width);
+    const lines = [];
+    const add = (value = "") => lines.push(String(value ?? ""));
+    add(centerThermal(currentSettings.businessName || "SOLRAK", width));
+    if (currentSettings.showAddress && currentSettings.address) add(centerThermal(currentSettings.address, width));
+    if (currentSettings.phone) add(centerThermal(`Tel. ${currentSettings.phone}`, width));
+    if (currentSettings.rfc) add(centerThermal(`RFC ${currentSettings.rfc}`, width));
+    add(rule);
+    add(centerThermal(`TICKET DE VENTA #${folio}`, width));
+    add(centerThermal(new Date(receipt?.createdAt || Date.now()).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" }), width));
+    add(`Cliente: ${receipt?.customerName || "Público general"}`);
+    add(rule);
+    for (const item of receipt?.items || []) {
+      add(clean(item.name || "Producto"));
+      if (item.code) add(`  ${clean(item.code)}`);
+      add(`  ${Number(item.qty || 0)} x ${moneyText(item.unitPrice)} = ${moneyText(item.total)}`);
+    }
+    add(rule);
+    add(`Subtotal: ${moneyText(receipt?.subtotal)}`);
+    if (currentSettings.showTax) add(`IVA:      ${moneyText(receipt?.tax)}`);
+    add(`TOTAL:    ${moneyText(receipt?.total)}`);
+    if ((receipt?.payments || []).length) {
+      add(rule);
+      for (const payment of receipt.payments) add(`${PAYMENT_LABELS[payment.method] || payment.method || "Pago"}: ${moneyText(payment.amount)}`);
+      if (Number(receipt?.change) > 0) add(`Cambio: ${moneyText(receipt.change)}`);
+    }
+    if (receipt?.note) { add(rule); add(`Nota: ${clean(receipt.note)}`); }
+    if (currentSettings.footer) { add(rule); add(centerThermal(currentSettings.footer, width)); }
+    return {
+      printerName: currentSettings.printerName || byId("solrakTicketPrinter")?.value || "system",
+      paperSize: currentSettings.paperSize,
+      copies: currentSettings.copies,
+      saleNumber: folio,
+      barcode: currentSettings.showBarcode !== false,
+      text: lines.join("\n"),
+      cut: true,
+    };
+  }
+
+  function printReceipt(receipt, options = {}) {
+    const currentSettings = loadSettings();
+    if (!receipt) return false;
+    if (!options.force && !currentSettings.printerEnabled) return false;
+    const html = printDocument(receipt, currentSettings);
+    if (typeof window.__SOLRAK_TEST_PRINT__ === "function") {
+      window.__SOLRAK_TEST_PRINT__({ html, receipt, settings: currentSettings });
+      return true;
+    }
+    const peripherals = window.SOLRAKPeripheralsV0191;
+    if (!peripherals?.capabilities?.().printer) {
+      if (typeof window.notice === "function") window.notice("La impresión térmica nativa no está disponible en esta instalación de Windows.", true);
+      return false;
+    }
+    const job = nativeTicketPayload(receipt, currentSettings);
+    Promise.resolve(peripherals.printTicket(job)).catch((error) => {
+      if (typeof window.notice === "function") window.notice(error?.message || "Windows no pudo imprimir el ticket.", true);
+    });
+    return true;
+  }
+
