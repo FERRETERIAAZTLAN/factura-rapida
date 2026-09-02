@@ -10,7 +10,7 @@
 
   function notify(message, error = false) {
     if (typeof window.notice === "function") window.notice(message, error);
-    else if (error && typeof window.alert === "function") window.alert(message);
+    else if (error && typeof window.alert === "function") window.SOLRAKDialog?.notice?.(message,{error:true});
   }
 
   function currentProducts() {

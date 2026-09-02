@@ -22,7 +22,9 @@ async function sendQuoteEmail(id){
     const formEmail=normalizeEmail(byId('quoteCustomerEmail')?.value||'');
     if(formEmail&&emailOk(formEmail))recipient=formEmail;
     else{
-      recipient=normalizeEmail(prompt('Correo del cliente','')||'');
+      if(!window.SOLRAKDialog?.prompt)return notice('El diálogo seguro todavía no está listo.',true);
+      const entered=await window.SOLRAKDialog.prompt('Correo del cliente',{title:'Enviar cotización',confirmLabel:'Usar correo',maxlength:254});
+      recipient=normalizeEmail(entered||'');
       if(!recipient)return;
       if(!emailOk(recipient))return notice('Escribe un correo válido para enviar la cotización.',true);
     }
