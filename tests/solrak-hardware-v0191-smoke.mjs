@@ -31,6 +31,7 @@ assert(cargo.includes('serialport = { version = "4", default-features = false }'
 assert(apply.includes('desktop-native-v0191'), "El empaquetado Windows no aplica el puente nativo");
 assert(!/Math\.random|mock|demo/i.test(js), "El módulo hardware contiene simulación/mock/demo");
 assert(!/cfdi|finkok/i.test(js + rust + apply), "Hardware invadió CFDI/Finkok");
+assert(!/print_to_printer|silent_print|direct_print/i.test(js + rust), "v0.1.91 no debe prometer impresión directa/silenciosa sin un comando nativo verificado");
 
 const calls = [];
 const dom = new JSDOM(`<!doctype html><html><head></head><body><section id="tab-configuracion"></section><div id="solrakScaleStatus"><strong></strong></div></body></html>`, {
@@ -58,6 +59,7 @@ assert(window.SOLRAKHardwareV0191?.version === "0.1.91", "No montó hardware v0.
 assert(window.document.getElementById("solrakHardwareV0191"), "No inyectó configuración de hardware");
 assert(window.document.getElementById("solrakHw91Port").value === "COM4" || [...window.document.getElementById("solrakHw91Port").options].some(o => o.value === "COM4"), "No cargó COM real");
 assert(window.document.getElementById("solrakHw91Printer").value === "Thermal 80", "No seleccionó impresora predeterminada");
+assert(window.SOLRAKPrinter?.directPrint !== true, "La impresora preferida no debe declararse como impresión directa mientras Windows muestra su diálogo");
 window.document.getElementById("solrakHw91Port").value = "COM4";
 await window.SOLRAKHardwareV0191.connectScale(true);
 await new Promise((resolve) => setTimeout(resolve, 300));
@@ -68,4 +70,4 @@ assert(calls.some(([c]) => c === "list_windows_printers"), "No consultó Windows
 await window.SOLRAKHardwareV0191.disconnectScale();
 assert(window.SOLRAKScale?.connected === false, "No marca desconexión real");
 dom.window.close();
-console.log("SOLRAK_HARDWARE_V0191_OK tauri=true serial=COM printer=windows scaleEvent=real noDemo=true");
+console.log("SOLRAK_HARDWARE_V0191_OK tauri=true serial=COM printer=windows scaleEvent=real directPrint=false noDemo=true");
