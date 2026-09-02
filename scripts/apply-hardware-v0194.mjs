@@ -69,11 +69,10 @@ if (!tickets.includes(directMarker)) {
 }
 await writeFile(ticketsPath, tickets, 'utf8');
 
-// WebView2: v0.1.83 observa todo el POS para mantener total/miniatura/tickets sincronizados.
-// Durante sync() el propio módulo también cambia ese DOM. Desconectar el observador mientras
-// se aplican esas mutaciones evita ciclos de autoobservación y deja el arranque de Windows finito.
+// WebView2: impedir que el observador global de v0.1.83 observe las mutaciones que su propio sync() produce.
+// Se conserva la observación de cambios reales del POS; solo se suspende durante cada sincronización.
 let uiOperativa = await readFile(uiOperativaPath, 'utf8');
-const startupGuardMarker = 'syncObserver.disconnect();';
+const startupGuardMarker = 'syncObserver?.disconnect();';
 if (!uiOperativa.includes(startupGuardMarker)) {
   const stateNeedle = '  let syncQueued = false;';
   if (!uiOperativa.includes(stateNeedle)) throw new Error('UI v0.1.83: no se encontró estado de sincronización');
@@ -82,15 +81,15 @@ if (!uiOperativa.includes(startupGuardMarker)) {
     `${stateNeedle}\n  let syncObserver = null;\n  const SYNC_OBSERVER_OPTIONS = { childList: true, subtree: true, characterData: true };`
   );
 
-  const oldSync = `  function sync() {\n    ensureStyle();\n    document.documentElement.dataset.solrakUi83 = "1";\n    ensureSidebar();\n    ensureCommandBar();\n    ensureActionBar();\n    bindLineDoubleClick();\n    applyTheme(safeStoreGet(THEME_KEY, document.documentElement.dataset.solrakUiTheme || "sky"));\n    syncTotal();\n    syncThumb();\n  }`;
-  const newSync = `  function sync() {\n    const observer = syncObserver;\n    if (observer) observer.disconnect();\n    try {\n      ensureStyle();\n      document.documentElement.dataset.solrakUi83 = "1";\n      ensureSidebar();\n      ensureCommandBar();\n      ensureActionBar();\n      bindLineDoubleClick();\n      applyTheme(safeStoreGet(THEME_KEY, document.documentElement.dataset.solrakUiTheme || "sky"));\n      syncTotal();\n      syncThumb();\n    } finally {\n      if (observer && document.body?.isConnected) observer.observe(document.body, SYNC_OBSERVER_OPTIONS);\n    }\n  }`;
-  if (!uiOperativa.includes(oldSync)) throw new Error('UI v0.1.83: no se encontró sync() esperado');
-  uiOperativa = uiOperativa.replace(oldSync, newSync);
+  const scheduleRe = /  function scheduleSync\(\) \{[\s\S]*?\n  \}\n  function boot\(\) \{/;
+  const scheduleMatch = uiOperativa.match(scheduleRe);
+  if (!scheduleMatch) throw new Error('UI v0.1.83: no se encontró scheduleSync()/boot() esperado');
+  const replacement = `  function scheduleSync() {\n    if (syncQueued) return;\n    syncQueued = true;\n    setTimeout(() => {\n      syncQueued = false;\n      syncObserver?.disconnect();\n      try { sync(); }\n      finally { if (syncObserver && document.body?.isConnected) syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS); }\n    }, 15);\n  }\n  function boot() {`;
+  uiOperativa = uiOperativa.replace(scheduleRe, replacement);
 
-  const oldObserver = '    new MutationObserver(scheduleSync).observe(document.body, { childList: true, subtree: true, characterData: true });';
-  const newObserver = '    syncObserver = new MutationObserver(scheduleSync);\n    syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS);';
-  if (!uiOperativa.includes(oldObserver)) throw new Error('UI v0.1.83: no se encontró MutationObserver esperado');
-  uiOperativa = uiOperativa.replace(oldObserver, newObserver);
+  const observerRe = /new MutationObserver\(scheduleSync\)\.observe\(document\.body,\s*\{\s*childList:\s*true,\s*subtree:\s*true,\s*characterData:\s*true\s*\}\);/;
+  if (!observerRe.test(uiOperativa)) throw new Error('UI v0.1.83: no se encontró MutationObserver esperado');
+  uiOperativa = uiOperativa.replace(observerRe, 'syncObserver = new MutationObserver(scheduleSync); syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS);');
 }
 new vm.Script(uiOperativa, { filename: 'solrak-ui-operativa-v0183.js' });
 await writeFile(uiOperativaPath, uiOperativa, 'utf8');
@@ -99,7 +98,7 @@ for (const [file, markers] of [
   [mainPath, ['HardwareStateV0194', 'print_raw_ticket_v0194', 'scale_read_v0194']],
   [indexPath, ['solrak-hardware-v0194.js']],
   [ticketsPath, [directMarker]],
-  [uiOperativaPath, [startupGuardMarker, 'SYNC_OBSERVER_OPTIONS', 'syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS)']],
+  [uiOperativaPath, [startupGuardMarker, 'SYNC_OBSERVER_OPTIONS', 'syncObserver = new MutationObserver(scheduleSync)']],
 ]) {
   const text = await readFile(file, 'utf8');
   for (const marker of markers) if (!text.includes(marker)) throw new Error(`${file}: falta ${marker}`);
