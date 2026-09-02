@@ -189,7 +189,8 @@ Deno.serve(async (req: Request) => {
       return json({
         ok: true,
         service: "pos-api",
-        version: 2,
+        version: 1,
+        capabilitiesVersion: 2,
         atomicSale: true,
         stockMovements: true,
         cashSessions: true,

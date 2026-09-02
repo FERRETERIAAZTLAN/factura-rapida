@@ -104,7 +104,11 @@ for (const rpc of [
   assert(edge.includes(`db.rpc("${rpc}"`), `El servicio no usa ${rpc}`);
 }
 
-assert(/version:\s*2/.test(edge), "pos-api no declara versión 2");
+assert(/version:\s*1/.test(edge), "pos-api rompió el contrato de salud v1");
+assert(
+  /capabilitiesVersion:\s*2/.test(edge),
+  "pos-api no declara las capacidades operativas v2",
+);
 assert(
   edge.includes("Escribe el nombre de cada producto común"),
   "pos-api no exige nombre para productos comunes",
