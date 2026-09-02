@@ -58,6 +58,7 @@ jobs:
           Copy-Item index.html native-work/desktop/dist/index.html -Force
           Get-ChildItem -Path . -File -Filter '*.js' | ForEach-Object { Copy-Item $_.FullName (Join-Path 'native-work/desktop/dist' $_.Name) -Force }
           node scripts/apply-hardware-v0194.mjs native-work/desktop
+          node scripts/apply-hardware-v0194.mjs native-work/desktop
           if(-not(Test-Path native-work/desktop/dist/solrak-hardware-v0194.js)){throw 'No se integró hardware JS'}
           if(-not(Test-Path native-work/desktop/src-tauri/src/solrak_hardware_v0194.rs)){throw 'No se integró hardware Rust'}
       - name: Cargo test y check Windows
@@ -77,7 +78,7 @@ jobs:
           $index=Get-Content native-work/desktop/dist/index.html -Raw
           foreach($m in @('hardware_status_v0194','list_serial_ports_v0194','scale_connect_v0194','scale_read_v0194','scale_disconnect_v0194','list_windows_printers_v0194','print_raw_ticket_v0194')){if(-not $main.Contains($m)){throw "main.rs no registra $m"}}
           foreach($m in @('serialport::available_ports()','powershell.exe','RAW_PRINT_HELPER')){if(-not $module.Contains($m)){throw "bridge Rust no contiene $m"}}
-          if(-not $tickets.Contains('SOLRAKHardwareV0194.directPrintEnabled')){throw 'Tickets no usan impresión directa v0.1.94'}
+          if(-not $tickets.Contains('nativeHardware?.directPrintEnabled?.()')){throw 'Tickets no usan impresión directa v0.1.94'}
           if(-not $index.Contains('solrak-hardware-v0194.js')){throw 'index Windows no carga hardware v0.1.94'}
           if(($module + (Get-Content solrak-hardware-v0194.js -Raw)) -match '(?i)cfdi|finkok|\bdemo\b|\bmock\b|simulad[oa]'){throw 'Hardware v0.1.94 invadió alcance o contiene simulación'}
       - name: Regresiones POS y UX
