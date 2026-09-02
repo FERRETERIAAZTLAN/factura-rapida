@@ -12,6 +12,8 @@
     allow_wholesale: "Usar precio de mayoreo",
     allow_inventory_entry: "Ingresar mercancía / ajustar inventario",
   });
+  const EMPLOYEE_OPTION = "Empleado · acceso según permisos";
+  const EMPLOYEE_HELP = "<strong>Empleado:</strong> accede únicamente a las funciones autorizadas. <strong>Administrador:</strong> tiene acceso completo y configura los permisos de cada empleado.";
   const state = { loaded:false, user:null, permissions:{...DEFAULTS}, users:[] };
   let observer = null;
   let refreshTimer = null;
@@ -40,10 +42,10 @@
 
   function employeeTerminology(){
     const seller=byId("userRole")?.querySelector('option[value="seller"]');
-    if(seller)seller.textContent="Empleado · acceso según permisos";
+    if(seller && seller.textContent!==EMPLOYEE_OPTION)seller.textContent=EMPLOYEE_OPTION;
     document.querySelectorAll("#userList .badge").forEach((badge)=>{ if(badge.textContent.trim()==="Vendedor")badge.textContent="Empleado"; });
     const help=document.querySelector("#tab-usuarios .callout");
-    if(help)help.innerHTML="<strong>Empleado:</strong> accede únicamente a las funciones autorizadas. <strong>Administrador:</strong> tiene acceso completo y configura los permisos de cada empleado.";
+    if(help && help.innerHTML!==EMPLOYEE_HELP)help.innerHTML=EMPLOYEE_HELP;
   }
 
   function applyPermissionUi(){
@@ -56,10 +58,12 @@
     for(const [selector,permission,message] of rules){
       document.querySelectorAll(selector).forEach((element)=>{
         const allowed=can(permission);
-        element.toggleAttribute("disabled",!allowed);
-        element.setAttribute("aria-disabled",allowed?"false":"true");
-        element.dataset.solrakPermission=permission;
-        if(!allowed)element.title=message;else if(element.title===message)element.removeAttribute("title");
+        if(element.disabled===allowed)element.toggleAttribute("disabled",!allowed);
+        const aria=allowed?"false":"true";
+        if(element.getAttribute("aria-disabled")!==aria)element.setAttribute("aria-disabled",aria);
+        if(element.dataset.solrakPermission!==permission)element.dataset.solrakPermission=permission;
+        if(!allowed && element.title!==message)element.title=message;
+        else if(allowed && element.title===message)element.removeAttribute("title");
       });
     }
     document.documentElement.dataset.solrakCanDiscount=can("allow_discounts")?"1":"0";
@@ -95,9 +99,7 @@
       button.onclick=async()=>{
         const userId=button.dataset.solrakSavePerms;
         const permissions={};
-        card.querySelectorAll("[data-solrak-perm-user]").forEach((input)=>{
-          if(input.dataset.solrakPermUser===userId)permissions[input.dataset.solrakPermKey]=input.checked===true;
-        });
+        card.querySelectorAll("[data-solrak-perm-user]").forEach((input)=>{ if(input.dataset.solrakPermUser===userId)permissions[input.dataset.solrakPermKey]=input.checked===true; });
         button.disabled=true;
         try{await api("saveUserPermissions",{userId,permissions});notice("Permisos del empleado guardados.");await refresh(true)}
         catch(error){notice(error.message,true)}finally{button.disabled=false}
