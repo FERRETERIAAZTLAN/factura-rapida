@@ -23,8 +23,12 @@ try {
       right: rect('.s201Right'),
       search: rect('#posSearch'),
       finish: rect('#fielFinishSale'),
+      actions: rect('.s201CartCard .fielPosActions'),
+      preview: rect('.s201Right .frPreview'),
       total: rect('.s201Right .frPosTotals'),
+      footer: rect('#solrakV0195Footer'),
       menuLabels: [...document.querySelectorAll('#solrakSalesV0198Menu .s98MenuItem')].map((x) => x.dataset.s98Label),
+      legacyVisible: [...document.querySelectorAll('#solrakFielSidebar>.fielMenu,#solrakV0195LegacyMenu,#solrakSalesV0195LegacyMenu,#solrakV0195Menu')].some((x) => getComputedStyle(x).display !== 'none'),
       bodyText: document.body.innerText
     };
   });
@@ -39,10 +43,16 @@ try {
   near(geometry.top.height, 74, 2, 'top.height');
   near(geometry.workspace.x, 260, 2, 'workspace.x');
   near(geometry.workspace.y, 74, 2, 'workspace.y');
-  near(geometry.right.width, 246, 3, 'right.width');
-  if (!geometry.search || geometry.search.width < 330 || geometry.search.height < 38) throw new Error('Buscador no tiene geometría Suma');
-  if (!geometry.finish || geometry.finish.width < 250 || geometry.finish.height < 50) throw new Error('FINALIZAR VENTA no ocupa el pie lateral');
-  if (!geometry.total || geometry.total.height < 176) throw new Error('Total no ocupa el bloque inferior derecho');
+  near(geometry.right.width, 265, 3, 'right.width');
+  near(geometry.preview.width, 199, 3, 'preview.width');
+  near(geometry.preview.height, 256, 3, 'preview.height');
+  near(geometry.finish.height, 66, 2, 'finish.height');
+  near(geometry.total.height, 156, 3, 'total.height');
+  near(geometry.total.y, 760, 8, 'total.y');
+  if (!geometry.search || geometry.search.width < 330 || geometry.search.height < 40) throw new Error('Buscador no tiene geometría Suma');
+  if (!geometry.actions || geometry.actions.y > 805) throw new Error(`Acciones inferiores siguen demasiado abajo: ${geometry.actions?.y}`);
+  if (!geometry.footer || geometry.footer.y > 1020) throw new Error(`Footer sigue demasiado abajo: ${geometry.footer?.y}`);
+  if (geometry.legacyVisible) throw new Error('Menú heredado sigue visible debajo del menú Suma');
   if (geometry.bodyText.includes('Recargas')) throw new Error('Apareció Recargas');
   for (const label of ['Verificador Precios','Nuevo Ticket','Producto Común','Consultar Ticket','Devolución','Clientes','Productos','Usuarios','Turnos','Caja','Configuración','Reportes']) {
     if (!geometry.menuLabels.includes(label)) throw new Error(`Falta menú ${label}`);
