@@ -1,0 +1,115 @@
+name: SOLRAK v0.1.94 - Diagnóstico bloqueo handlers Windows
+
+on:
+  push:
+    branches: [release/v0.1.94-hardware]
+    paths:
+      - '.github/workflows/diagnose-v0194-handler-lock.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FR_VERSION: "0.1.94"
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+  FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
+  FR_FIX1_SHA256: "144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134"
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v0.1.94-hardware
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Reconstruir paquete productivo con instrumentación
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
+          cmd /c "git show $env:FR_FIX1_COMMIT`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1'}
+          $sha=(Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne $env:FR_FIX1_SHA256){throw "FIX1 hash inesperado $sha"}
+          Expand-Archive FIX1.zip . -Force
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          node scripts/ensure-rust-deps-v0143.mjs desktop/src-tauri/Cargo.toml
+          Push-Location desktop
+          npm install --no-audit --no-fund
+          node scripts/set-version.mjs "$env:FR_VERSION"
+          Pop-Location
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile production-source.html -UseBasicParsing -TimeoutSec 30
+          if((Get-Item production-source.html).Length -lt 10000){throw 'UI productiva incompleta'}
+          $env:FR_WEB_SOURCE=(Resolve-Path production-source.html).Path
+          Push-Location desktop
+          npm run sync-web
+          Pop-Location
+          node scripts/sanitize-production-ui-v0142.mjs desktop/dist/index.html
+          node scripts/clean-webview-startup-v0148.mjs desktop/dist/index.html
+          node scripts/fix-facturar-mutation-v0148.mjs desktop/dist/index.html
+          $mods=@(
+            'quotes-module.js','quotes-email-module.js','product-images-module.js','pos-module.js',
+            'solrak-desktop-v0162.js','solrak-logo-v0162.js','solrak-desktop-v0163.js','solrak-sales-report-v0163.js',
+            'solrak-pos-workspace-v0165.js','solrak-professional-pos-v0166.js','solrak-pos-clear-footer-v0167.js','solrak-simple-ui-v0168.js',
+            'solrak-sumapro-tickets-v0169.js','solrak-redesign-v0170.js','solrak-sumapro-fiel-v0171.js','solrak-reports-v0172.js','solrak-flow-v0173.js',
+            'solrak-sales-v0174.js','solrak-inventory-v0175.js','solrak-held-tickets-v0176.js','solrak-price-verifier-v0177.js','solrak-permissions-v0179.js',
+            'solrak-product-lifecycle-v0180.js','solrak-clients-credit-v0181.js','solrak-credit-accounts-v0182.js','solrak-ui-operativa-v0183.js','solrak-ui-hardening-v0184.js',
+            'solrak-caja-cortes-v0185.js','solrak-formularios-v0186.js','solrak-categorias-v0187.js','solrak-inventory-mode-v0188.js','solrak-shifts-v0189.js',
+            'solrak-ux-core-v0190.js','solrak-peripherals-v0191.js','solrak-ux-hardening-v0192.js','solrak-startup-diagnostics-v0194.js'
+          )
+          foreach($f in $mods){Copy-Item $f "desktop/dist/$f" -Force;node --check "desktop/dist/$f"}
+          $tags=@(
+            '<script src="solrak-startup-diagnostics-v0194.js"></script>',
+            '<script src="quotes-module.js?v=1"></script>','<script src="quotes-email-module.js?v=1"></script>','<script src="product-images-module.js?v=1"></script>',
+            '<script src="solrak-desktop-v0162.js?v=1"></script>','<script src="solrak-logo-v0162.js?v=1"></script>','<script src="solrak-desktop-v0163.js?v=1"></script>','<script src="solrak-sales-report-v0163.js?v=1"></script>',
+            '<script src="solrak-pos-workspace-v0165.js?v=1"></script>','<script src="solrak-professional-pos-v0166.js?v=1"></script>','<script src="solrak-pos-clear-footer-v0167.js?v=1"></script>','<script src="solrak-simple-ui-v0168.js?v=1"></script>',
+            '<script src="solrak-sumapro-tickets-v0169.js?v=1"></script>','<script src="solrak-redesign-v0170.js?v=1"></script>','<script src="solrak-sumapro-fiel-v0171.js?v=1"></script>','<script src="solrak-reports-v0172.js?v=1"></script>','<script src="solrak-flow-v0173.js?v=1"></script>',
+            '<script src="solrak-sales-v0174.js"></script>','<script src="solrak-inventory-v0175.js"></script>','<script src="solrak-held-tickets-v0176.js"></script>','<script src="solrak-price-verifier-v0177.js"></script>','<script src="solrak-permissions-v0179.js"></script>',
+            '<script src="solrak-product-lifecycle-v0180.js"></script>','<script src="solrak-clients-credit-v0181.js"></script>','<script src="solrak-credit-accounts-v0182.js"></script>','<script src="solrak-ui-operativa-v0183.js"></script>','<script src="solrak-ui-hardening-v0184.js"></script>',
+            '<script src="solrak-caja-cortes-v0185.js"></script>','<script src="solrak-formularios-v0186.js"></script>','<script src="solrak-categorias-v0187.js"></script>','<script src="solrak-inventory-mode-v0188.js"></script>','<script src="solrak-shifts-v0189.js"></script>',
+            '<script src="solrak-ux-core-v0190.js"></script>','<script src="solrak-peripherals-v0191.js"></script>','<script src="solrak-ux-hardening-v0192.js"></script>'
+          )
+          $p='desktop/dist/index.html';$h=Get-Content $p -Raw
+          foreach($tag in $tags){$h=$h.Replace($tag,'')}
+          foreach($tag in $tags){$h=$h.Replace('</body>',"$tag`r`n</body>")}
+          Set-Content $p $h -Encoding UTF8
+          node scripts/apply-hardware-v0194.mjs desktop
+          node scripts/apply-solrak-brand-v0162.mjs desktop
+          node tests/audit-external-startup-resources.mjs desktop/dist/index.html --require-zero
+
+      - name: Compilar EXE diagnóstico release
+        working-directory: desktop/src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
+          cargo build --release
+
+      - name: Ejecutar y capturar handlers
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force diagnostics-v0194 | Out-Null
+          $log=Join-Path $env:TEMP 'factura-rapida-startup.log';Remove-Item $log -Force -ErrorAction SilentlyContinue
+          $exe=(Resolve-Path 'desktop/src-tauri/target/release/factura-rapida.exe').Path
+          $p=Start-Process -FilePath $exe -PassThru
+          for($i=1;$i -le 45;$i++){Start-Sleep -Seconds 1;if($p.HasExited){break}}
+          if(-not $p.HasExited){Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue}
+          if(Test-Path $log){Copy-Item $log diagnostics-v0194/runtime-handler-r3.txt -Force}else{'SIN_LOG' | Set-Content diagnostics-v0194/runtime-handler-r3.txt}
+          Get-Content diagnostics-v0194/runtime-handler-r3.txt
+
+      - name: Guardar diagnóstico en rama
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'FERRETERIAAZTLAN'
+          git config user.email '48nym4hh7h@privaterelay.appleid.com'
+          git add diagnostics-v0194/runtime-handler-r3.txt
+          git commit -m 'diagnostic: registrar handlers de arranque v0.1.94'
+          git push origin HEAD:release/v0.1.94-hardware
