@@ -9,6 +9,7 @@ on:
       - 'solrak-sumapro-tickets-v0169.js'
       - 'solrak-peripherals-v0191.js'
       - 'native/windows-printer-v0194.rs'
+      - 'native/ticket-print-v0194.fragment.txt'
       - 'scripts/apply-windows-printer-v0194.mjs'
       - 'tests/solrak-windows-printer-v0194-smoke.mjs'
       - '.github/workflows/solrak-v0194-windows-printer-native-safe.yml'
