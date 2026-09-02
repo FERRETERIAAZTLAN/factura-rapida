@@ -7,6 +7,7 @@ const tickets=fs.readFileSync('solrak-sumapro-tickets-v0169.js','utf8');
 const fiel=fs.readFileSync('solrak-sumapro-fiel-v0171.js','utf8');
 const sql=fs.readFileSync('supabase/migrations/202609020010_keyboard_ticket_ux.sql','utf8');
 const api=fs.readFileSync('supabase/functions/ticket-ux-api/index.ts','utf8');
+const nativeConfirmOrPrompt=/(^|[^.\w])(confirm|prompt)\s*\(|window\.(confirm|prompt)\s*\(/m;
 
 assert.match(ux,/const VERSION="0\.1\.90"/);
 assert.match(ux,/e\.key==="F2"/);
@@ -29,12 +30,11 @@ assert.match(ux,/window\.confirm=.*return false/);
 assert.doesNotMatch(ux,/cfdi-api|finkok/i);
 
 assert.match(pos,/const MAX_TICKETS = 8;/);
-assert.doesNotMatch(pos,/\bconfirm\s*\(/);
+assert.doesNotMatch(pos,nativeConfirmOrPrompt);
 assert.match(pos,/SOLRAKDialog/);
 assert.match(fiel,/confirmSaleVoid/);
 assert.match(fiel,/confirmReturnImpact/);
-assert.doesNotMatch(fiel,/\bprompt\s*\(/);
-assert.doesNotMatch(fiel,/\bconfirm\s*\(/);
+assert.doesNotMatch(fiel,nativeConfirmOrPrompt);
 
 assert.match(tickets,/const barcodeValue = String\(receipt\?\.saleNumber \|\| 0\);/);
 assert.match(tickets,/replace\(\/\[\^0-9\]\/g, ""\)/);
