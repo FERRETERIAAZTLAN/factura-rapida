@@ -1,0 +1,77 @@
+name: SOLRAK v0.1.71 POS Fiel Safe Test
+
+on:
+  push:
+    branches: [feature/v0.1.71-sumapro-fiel]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias de prueba
+        run: npm install --no-save --no-audit --no-fund jsdom@25
+
+      - name: Validar interfaz y operaciones v0.1.71
+        run: |
+          set -euo pipefail
+          node --check pos-module.js
+          node --check solrak-sumapro-fiel-v0171.js
+          node --check tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node --check tests/solrak-pos-operations-v0171-contract.mjs
+          node tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node tests/solrak-pos-operations-v0171-contract.mjs
+          node tests/pos-module-smoke.mjs
+
+      - name: Ejecutar regresiones productivas
+        run: |
+          set -euo pipefail
+          node tests/solrak-redesign-v0170-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+          node tests/solrak-simple-ui-v0168-smoke.mjs
+          node tests/solrak-pos-clear-footer-v0167-smoke.mjs
+          node tests/solrak-professional-pos-v0166-smoke.mjs
+          node tests/solrak-pos-workspace-v0165-smoke.mjs
+          node tests/pos-suma-v0163-smoke.mjs
+          node tests/solrak-v0164-cash-report-contract.mjs
+          node tests/solrak-desktop-v0163-smoke.mjs
+          node tests/solrak-desktop-v0162-smoke.mjs
+          node tests/quote-email-ui-smoke.mjs
+
+      - name: Confirmar aislamiento y orden de carga
+        run: |
+          set -euo pipefail
+          grep -q 'solrak-sumapro-fiel-v0171.js?v=1' index.html
+          grep -q 'pos_complete_sale' supabase/migrations/202609020001_sumapro_pos_operations.sql
+          grep -q 'pos_return_sale' supabase/migrations/202609020001_sumapro_pos_operations.sql
+          if grep -qi 'Recargas y Servicios' solrak-sumapro-fiel-v0171.js; then
+            echo 'La opción excluida apareció en v0.1.71' >&2
+            exit 1
+          fi
+          test "$(grep -o 'solrak-sumapro-fiel-v0171.js?v=1' index.html | wc -l)" -eq 1
+
+      - name: Simular paquete Windows
+        run: |
+          set -euo pipefail
+          package_dir="$(mktemp -d)"
+          cp index.html "$package_dir/index.html"
+          for file in quotes-module.js quotes-email-module.js product-images-module.js pos-module.js solrak-desktop-v0162.js solrak-logo-v0162.js solrak-desktop-v0163.js solrak-sales-report-v0163.js solrak-pos-workspace-v0165.js solrak-professional-pos-v0166.js solrak-pos-clear-footer-v0167.js solrak-simple-ui-v0168.js solrak-sumapro-tickets-v0169.js solrak-redesign-v0170.js solrak-sumapro-fiel-v0171.js; do
+            cp "$file" "$package_dir/$file"
+            node --check "$package_dir/$file"
+          done
+          test "$(grep -o 'solrak-sumapro-fiel-v0171.js?v=1' "$package_dir/index.html" | wc -l)" -eq 1
+          printf '%s\n' 'SOLRAK_V0171_WINDOWS_PACKAGE_SIMULATION_OK'
