@@ -153,6 +153,17 @@ s=shifts.read_text(encoding='utf-8')
 s=s.replace('function notify(message,error=false){try{if(typeof notice==="function")return notice(message,error)}catch{};if(error)window.alert?.(message)}','function notify(message,error=false){try{if(typeof notice==="function")return notice(message,error)}catch{};window.SOLRAKDialog?.notice?.(message,{error})}',1)
 shifts.write_text(s,encoding='utf-8')
 
+# Alta densidad adicional y feedback visible de carga para módulos legacy.
+ux=Path('solrak-keyboard-ticket-ux-v0190.js')
+s=ux.read_text(encoding='utf-8')
+needle='html[data-solrak-ux90="1"] .frTicket{transition:none!important}html[data-solrak-ux90="1"] .solrakTicketDock{scroll-behavior:auto!important}'
+extra='''html[data-solrak-ux90="1"] .frTicket{transition:none!important}html[data-solrak-ux90="1"] .solrakTicketDock{scroll-behavior:auto!important}
+html[data-solrak-ux90="1"] .quote-grid{gap:7px!important}html[data-solrak-ux90="1"] .quote-customer-grid{gap:5px!important;margin-top:5px!important}html[data-solrak-ux90="1"] .quote-row{gap:6px!important;padding:6px 7px!important;border-radius:3px!important}html[data-solrak-ux90="1"] .quote-actions{gap:3px!important}html[data-solrak-ux90="1"] .history-list{gap:3px!important}html[data-solrak-ux90="1"] .results{gap:3px!important;margin-top:4px!important}html[data-solrak-ux90="1"] .result{padding:6px 7px!important;border-radius:3px!important}html[data-solrak-ux90="1"] .statusgrid{gap:5px!important;margin-bottom:7px!important}html[data-solrak-ux90="1"] .stat{padding:6px 8px!important;border-radius:3px!important}
+body.loading::after{content:"Procesando…";position:fixed;z-index:40000;left:50%;top:10px;transform:translateX(-50%);padding:6px 12px;border:1px solid #c8d0d6;border-radius:3px;background:#fff;color:#26333d;box-shadow:0 5px 18px rgba(0,0,0,.18);font:800 10px/1.2 "Segoe UI",sans-serif;pointer-events:none}'''
+if needle in s and 'body.loading::after{content:"Procesando…"' not in s:
+    s=s.replace(needle,extra,1)
+ux.write_text(s,encoding='utf-8')
+
 # HTML principal: reemplazar confirmaciones legacy por el servicio de diálogos.
 index=Path('index.html')
 s=index.read_text(encoding='utf-8')
