@@ -58,7 +58,7 @@ if (!index.includes(scriptTag)) {
 await writeFile(indexPath, index, 'utf8');
 
 let tickets = await readFile(ticketsPath, 'utf8');
-const directMarker = 'SOLRAKHardwareV0194.directPrintEnabled';
+const directMarker = 'nativeHardware?.directPrintEnabled?.()';
 if (!tickets.includes(directMarker)) {
   const frameNeedle = '    const frame = document.createElement("iframe");';
   if (!tickets.includes(frameNeedle)) throw new Error('tickets v0.1.69: no se encontró inicio de impresión por iframe');
@@ -70,7 +70,7 @@ await writeFile(ticketsPath, tickets, 'utf8');
 for (const [file, markers] of [
   [mainPath, ['HardwareStateV0194', 'print_raw_ticket_v0194', 'scale_read_v0194']],
   [indexPath, ['solrak-hardware-v0194.js']],
-  [ticketsPath, ['SOLRAKHardwareV0194.directPrintEnabled']],
+  [ticketsPath, [directMarker]],
 ]) {
   const text = await readFile(file, 'utf8');
   for (const marker of markers) if (!text.includes(marker)) throw new Error(`${file}: falta ${marker}`);
