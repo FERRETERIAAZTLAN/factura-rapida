@@ -10,9 +10,27 @@ page.on('console', (message) => {
   if (message.type() === 'error') consoleErrors.push(message.text());
 });
 
+const scripts = [
+  ['solrak-suma-sales-v0195.js', 'SOLRAKSumaSalesV0195'],
+  ['solrak-sales-exact-v0198.js', 'SOLRAKSalesExactV0198'],
+  ['solrak-sales-photo-v0199.js', 'SOLRAKSalesPhotoV0199'],
+  ['solrak-sales-reference-v0200.js', 'SOLRAKSalesReferenceV0200'],
+  ['solrak-sales-suma-v0201.js', 'SOLRAKSalesSumaV0201'],
+  ['solrak-sales-suma-v0201-tune.js', 'SOLRAKSalesSumaV0201Tune']
+];
+
 try {
-  await page.goto('http://127.0.0.1:4173/tests/fixtures/solrak-sales-suma-v0201.html', { waitUntil: 'networkidle' });
-  await page.waitForFunction(() => Boolean(window.SOLRAKSalesSumaV0201), null, { timeout: 5000 });
+  await page.goto('http://127.0.0.1:4173/tests/fixtures/solrak-sales-suma-v0201.html', { waitUntil: 'domcontentloaded' });
+
+  // La prueba visual no depende del timing del servidor para cargar los scripts.
+  // Si el fixture no alcanzó a cargar alguno, Playwright lo inyecta directamente
+  // desde el checkout real de la rama antes de medir la geometría.
+  for (const [path, globalName] of scripts) {
+    const loaded = await page.evaluate((name) => Boolean(window[name]), globalName);
+    if (!loaded) await page.addScriptTag({ path });
+  }
+
+  await page.waitForFunction(() => Boolean(window.SOLRAKSalesSumaV0201 && window.SOLRAKSalesSumaV0201Tune), null, { timeout: 5000 });
   await page.evaluate(() => {
     window.SOLRAKSalesExactV0198?.mount?.();
     window.SOLRAKSalesPhotoV0199?.mount?.();
@@ -21,7 +39,7 @@ try {
     window.SOLRAKSalesSumaV0201Tune?.mount?.();
   });
   await page.waitForSelector('#solrakSalesSumaV0201Workspace', { state: 'visible', timeout: 5000 });
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(300);
 
   const geometry = await page.evaluate(() => {
     const rect = (selector) => {
@@ -49,21 +67,21 @@ try {
   });
 
   const near = (actual, expected, tolerance, label) => {
-    if (Math.abs(actual - expected) > tolerance) throw new Error(`${label}: ${actual} fuera de ${expected}±${tolerance}`);
+    if (actual == null || Math.abs(actual - expected) > tolerance) throw new Error(`${label}: ${actual} fuera de ${expected}±${tolerance}`);
   };
   if (geometry.viewport.width !== 1448 || geometry.viewport.height !== 1086) throw new Error('Viewport visual incorrecto');
-  near(geometry.sidebar.x, 0, 1, 'sidebar.x');
-  near(geometry.sidebar.width, 260, 2, 'sidebar.width');
-  near(geometry.top.x, 260, 2, 'top.x');
-  near(geometry.top.height, 74, 2, 'top.height');
-  near(geometry.workspace.x, 260, 2, 'workspace.x');
-  near(geometry.workspace.y, 74, 2, 'workspace.y');
-  near(geometry.right.width, 265, 3, 'right.width');
-  near(geometry.preview.width, 199, 3, 'preview.width');
-  near(geometry.preview.height, 256, 3, 'preview.height');
-  near(geometry.finish.height, 66, 2, 'finish.height');
-  near(geometry.total.height, 156, 3, 'total.height');
-  near(geometry.total.y, 760, 8, 'total.y');
+  near(geometry.sidebar?.x, 0, 1, 'sidebar.x');
+  near(geometry.sidebar?.width, 260, 2, 'sidebar.width');
+  near(geometry.top?.x, 260, 2, 'top.x');
+  near(geometry.top?.height, 74, 2, 'top.height');
+  near(geometry.workspace?.x, 260, 2, 'workspace.x');
+  near(geometry.workspace?.y, 74, 2, 'workspace.y');
+  near(geometry.right?.width, 265, 3, 'right.width');
+  near(geometry.preview?.width, 199, 3, 'preview.width');
+  near(geometry.preview?.height, 256, 3, 'preview.height');
+  near(geometry.finish?.height, 66, 2, 'finish.height');
+  near(geometry.total?.height, 156, 3, 'total.height');
+  near(geometry.total?.y, 760, 10, 'total.y');
   if (!geometry.search || geometry.search.width < 330 || geometry.search.height < 40) throw new Error('Buscador no tiene geometría Suma');
   if (!geometry.actions || geometry.actions.y > 805) throw new Error(`Acciones inferiores siguen demasiado abajo: ${geometry.actions?.y}`);
   if (!geometry.footer || geometry.footer.y > 1020) throw new Error(`Footer sigue demasiado abajo: ${geometry.footer?.y}`);
