@@ -1,0 +1,57 @@
+name: SOLRAK - Ajuste y relanzamiento v0.1.95
+
+on:
+  push:
+    branches: [release/v0.1.95-suma-sales]
+    paths:
+      - '.github/workflows/fix-retry-v0195.yml'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  fix-and-retry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v0.1.95-suma-sales
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Corregir etiqueta FINALIZAR VENTA
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const p = 'solrak-suma-sales-v0195.js';
+          let s = fs.readFileSync(p, 'utf8');
+          const needle = '    sidebar.insertBefore(menu, byId("fielFinishSale"));\n    return true;';
+          const replacement = '    sidebar.insertBefore(menu, byId("fielFinishSale"));\n    const finish = byId("fielFinishSale");\n    if (finish && finish.textContent !== "FINALIZAR VENTA") finish.textContent = "FINALIZAR VENTA";\n    return true;';
+          if (!s.includes('finish.textContent !== "FINALIZAR VENTA"')) {
+            if (!s.includes(needle)) throw new Error('No se encontró punto de inserción');
+            s = s.replace(needle, replacement);
+            fs.writeFileSync(p, s);
+          }
+          NODE
+          node --check solrak-suma-sales-v0195.js
+          npm install --no-save --no-audit --no-fund --package-lock=false jsdom@26.1.0
+          node tests/solrak-suma-sales-v0195-smoke.mjs
+      - name: Guardar ajuste
+        shell: bash
+        run: |
+          if git diff --quiet -- solrak-suma-sales-v0195.js; then
+            echo 'Etiqueta ya corregida.'
+          else
+            git config user.name 'FERRETERIAAZTLAN'
+            git config user.email '48nym4hh7h@privaterelay.appleid.com'
+            git add solrak-suma-sales-v0195.js
+            git commit -m 'fix: fijar FINALIZAR VENTA en pantalla v0.1.95'
+            git push origin HEAD:release/v0.1.95-suma-sales
+          fi
+      - name: Relanzar publicación v0.1.95
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run windows-release-v0195.yml --ref release/v0.1.95-suma-sales
