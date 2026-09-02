@@ -21,23 +21,25 @@ async function context(req:Request){
   return {session,user,businessId:user.business_id};
 }
 
+async function canEnterInventory(ctx:any){
+  if(ctx.user.role==="admin")return true;
+  const row=(await db.from("pos_user_permissions").select("allow_inventory_entry").eq("business_id",ctx.businessId).eq("user_id",ctx.user.id).maybeSingle()).data;
+  return row?.allow_inventory_entry===true;
+}
+
 Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:cors});
   if(req.method!=="POST")return json({error:"Método no permitido"},405);
-  let body:any={};
-  try{body=await req.json()}catch{return json({error:"JSON inválido"},400)}
+  let body:any={};try{body=await req.json()}catch{return json({error:"JSON inválido"},400)}
   const action=clean(body?.action,60);
   try{
-    if(action==="health")return json({ok:true,service:"inventory-api",version:1,purchases:true,weightedAverageCost:true,adjustments:true,cfdiUntouched:true});
-    const ctx=await context(req);
-    if(!ctx)return json({error:"Sesión inválida o vencida"},401);
+    if(action==="health")return json({ok:true,service:"inventory-api",version:2,purchases:true,weightedAverageCost:true,adjustments:true,permissionAware:true,cfdiUntouched:true});
+    const ctx=await context(req);if(!ctx)return json({error:"Sesión inválida o vencida"},401);
     if(!["admin","seller"].includes(ctx.user.role))return json({error:"Usuario no autorizado"},403);
 
     if(action==="receivePurchase"){
-      if(ctx.user.role!=="admin")return json({error:"Solo el administrador puede registrar entradas de mercancía"},403);
-      const supplierId=clean(body?.supplierId,80);
-      const notes=clean(body?.notes,500);
-      const items=Array.isArray(body?.items)?body.items:[];
+      if(!(await canEnterInventory(ctx)))return json({error:"No tienes permiso para registrar entradas de mercancía"},403);
+      const supplierId=clean(body?.supplierId,80),notes=clean(body?.notes,500),items=Array.isArray(body?.items)?body.items:[];
       if(!supplierId||!items.length)return json({error:"Selecciona proveedor y productos"},400);
       if(items.length>500)return json({error:"Máximo 500 productos por entrada"},400);
       const normalized=items.map((item:any)=>({product_id:clean(item?.product_id||item?.productId,80),qty:num(item?.qty),unit_cost:num(item?.unit_cost??item?.unitCost),iva_rate:num(item?.iva_rate??item?.ivaRate)}));
@@ -47,7 +49,7 @@ Deno.serve(async(req:Request)=>{
     }
 
     if(action==="adjustStock"){
-      if(ctx.user.role!=="admin")return json({error:"Solo el administrador puede ajustar inventario"},403);
+      if(!(await canEnterInventory(ctx)))return json({error:"No tienes permiso para ajustar inventario"},403);
       const productId=clean(body?.productId,80),reason=clean(body?.reason,500),quantityDelta=num(body?.quantityDelta);
       if(!productId||!reason||!Number.isFinite(quantityDelta)||quantityDelta===0)return json({error:"Producto, cantidad y motivo son obligatorios"},400);
       const result=await db.rpc("solrak_adjust_inventory",{p_business_id:ctx.businessId,p_user_id:ctx.user.id,p_product_id:productId,p_quantity_delta:quantityDelta,p_reason:reason});
@@ -71,10 +73,6 @@ Deno.serve(async(req:Request)=>{
       const rows=(products.data||[]).filter((p:any)=>num(p.stock)<=num(p.min_stock));
       return json({ok:true,products:rows,total:rows.length});
     }
-
     return json({error:"Acción desconocida"},400);
-  }catch(error:any){
-    console.error("inventory-api",error);
-    return json({error:"Error del servidor",detail:String(error?.message||error).slice(0,400)},500);
-  }
+  }catch(error:any){console.error("inventory-api",error);return json({error:"Error del servidor",detail:String(error?.message||error).slice(0,400)},500)}
 });

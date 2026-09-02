@@ -1,0 +1,65 @@
+name: SOLRAK v0.1.76 permisos usuarios safe
+
+on:
+  push:
+    branches:
+      - feature/v0.1.76-user-permissions
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v0.1.76-user-permissions
+          fetch-depth: 0
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Dependencia de pruebas
+        run: npm install --no-save jsdom@26.1.0
+      - name: Smoke permisos v0.1.76
+        run: node tests/solrak-permissions-v0176-smoke.mjs
+      - name: Regresiones POS completas
+        run: |
+          node tests/solrak-inventory-v0175-smoke.mjs
+          node tests/solrak-sales-v0174-smoke.mjs
+          node tests/solrak-flow-v0173-smoke.mjs
+          node tests/solrak-reports-v0172-smoke.mjs
+          node tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node tests/solrak-pos-operations-v0171-contract.mjs
+          node tests/pos-module-smoke.mjs
+          node tests/solrak-redesign-v0170-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+      - name: Guardas de permisos y alcance
+        run: |
+          grep -q 'allow_discounts' solrak-permissions-v0176.js
+          grep -q 'allow_price_changes' solrak-permissions-v0176.js
+          grep -q 'allow_wholesale' solrak-permissions-v0176.js
+          grep -q 'allow_inventory_entry' solrak-permissions-v0176.js
+          grep -q 'permissionAware:true' supabase/functions/inventory-api/index.ts
+          ! grep -Eqi 'cfdi-api|finkok|recargas y servicios' solrak-permissions-v0176.js
+      - name: Integrar modulo v0.1.76 en index
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html'); s=p.read_text(encoding='utf-8'); tag='<script src="solrak-permissions-v0176.js"></script>'
+          if tag not in s:
+              if '</body>' not in s: raise SystemExit('index.html no contiene </body>')
+              s=s.replace('</body>',tag+'\n</body>',1); p.write_text(s,encoding='utf-8')
+          PY
+          grep -q '<script src="solrak-permissions-v0176.js"></script>' index.html
+      - name: Persistir integracion
+        run: |
+          if git diff --quiet -- index.html; then echo 'Integracion ya presente.'; exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'chore: integrar permisos v0.1.76 en index'
+          git push origin HEAD:feature/v0.1.76-user-permissions
