@@ -78,13 +78,7 @@ jobs:
           assert [s.index(name) for name in names] == sorted(s.index(name) for name in names)
           PY
       - name: Render 1448x1086
-        shell: bash
-        run: |
-          python3 -m http.server 4173 > /tmp/solrak-v0201-http.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill $SERVER_PID || true' EXIT
-          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:4173/tests/fixtures/solrak-sales-suma-v0201.html >/dev/null && break; sleep 0.5; done
-          node tests/solrak-sales-suma-v0201-visual.mjs
+        run: node tests/solrak-sales-suma-v0201-visual.mjs
       - name: Alcance seguro
         shell: bash
         run: |
