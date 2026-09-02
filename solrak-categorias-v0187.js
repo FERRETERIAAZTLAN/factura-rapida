@@ -6,7 +6,6 @@
   const byId=(id)=>document.getElementById(id);
   const esc=(v)=>String(v??"").replace(/[&<>\"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
   const state={categories:[],loaded:false};
-  let syncTimer=null;
 
   function currentSession(){try{return session||window.session||null}catch{return window.session||null}}
   function anonKey(){try{return ANON_KEY||window.ANON_KEY||""}catch{return window.ANON_KEY||""}}
@@ -46,7 +45,9 @@
     select.innerHTML=categories.map(c=>`<option value="${esc(c.name)}" ${c.active===false?'disabled':''}>#${c.id} · ${esc(c.name)}${c.active===false?' · Inactiva':''}</option>`).join("");
     const match=categories.find(c=>c.name===selected)||categories.find(c=>c.name==="Producto en General")||categories.find(c=>c.id===1)||categories[0];
     if(match){
-      if(match.active===false&&!select.querySelector(`option[value="${CSS.escape(match.name)}"]`))select.insertAdjacentHTML("beforeend",`<option value="${esc(match.name)}">#${match.id} · ${esc(match.name)} · Inactiva</option>`);
+      const options=[...select.options];
+      const existing=options.find(option=>option.value===match.name);
+      if(existing&&match.active===false)existing.disabled=false;
       select.value=match.name;
     }
   }
@@ -86,12 +87,10 @@
     document.dispatchEvent(new CustomEvent("solrak:categories-updated",{detail:{categories:state.categories}}));
   }
 
-  function sync(){ensureStyle();syncCategorySelect();renderManager()}
-  function schedule(){clearTimeout(syncTimer);syncTimer=setTimeout(sync,20)}
+  function sync(){ensureStyle();syncCategorySelect()}
   function boot(){
     ensureStyle();refresh().catch(e=>console.warn("SOLRAK categories",e));
-    document.addEventListener("click",event=>{const hit=event.target?.closest?.('[data-tab="inventario"],#openProduct,[data-editp]');if(hit)setTimeout(()=>{sync();if(!state.loaded)refresh().catch(()=>{})},25)},true);
-    new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});
+    document.addEventListener("click",event=>{const hit=event.target?.closest?.('[data-tab="inventario"],#openProduct,[data-editp]');if(hit)setTimeout(()=>{sync();if(!state.loaded)refresh().catch(()=>{});else renderManager()},25)},true);
   }
 
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
