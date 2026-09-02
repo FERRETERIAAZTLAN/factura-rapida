@@ -33,6 +33,8 @@ assert.match(ux,/window\.alert=.*toast/);
 assert.match(ux,/window\.confirm=.*return false/);
 assert.match(ux,/--solrak90-row:30px/);
 assert.match(ux,/transition:none!important/);
+assert.match(ux,/\.quote-grid\{gap:7px!important\}/);
+assert.match(ux,/body\.loading::after\{content:"Procesando…"/);
 assert.doesNotMatch(ux,/cfdi-api|finkok/i);
 
 assert.match(pos,/const MAX_TICKETS = 8;/);
