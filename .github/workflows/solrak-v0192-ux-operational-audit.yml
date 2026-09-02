@@ -24,6 +24,7 @@ jobs:
       - name: Aplicar parche reproducible v0.1.92
         shell: bash
         run: |
+          # En una rama ya materializada este paso debe ser un no-op; la suite valida los archivos persistidos.
           if grep -q 'solrak-ux-hardening-v0192.js' index.html; then
             echo 'SOLRAK_APPLY_UX_V0192_ALREADY_APPLIED'
           else
