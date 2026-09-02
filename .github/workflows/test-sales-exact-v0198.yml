@@ -1,0 +1,67 @@
+name: SOLRAK - Test Ventas Exactas v0.1.98
+
+on:
+  push:
+    branches: [fix/v0.1.98-ventas-suma-exacta]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'solrak-sales-exact-v0198.js'
+      - 'scripts/apply-sales-exact-v0198.mjs'
+      - 'tests/solrak-sales-exact-v0198-*.mjs'
+      - '.github/workflows/test-sales-exact-v0198.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sales-v0198:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar jsdom
+        run: npm install --no-save --no-audit --no-fund --package-lock=false jsdom@26.1.0
+      - name: Sintaxis
+        run: |
+          node --check solrak-suma-sales-v0195.js
+          node --check solrak-common-product-v0196.js
+          node --check solrak-report-detail-v0197.js
+          node --check solrak-sales-exact-v0198.js
+          node --check scripts/apply-sales-exact-v0198.mjs
+      - name: Regresiones previas
+        run: |
+          node tests/solrak-suma-sales-v0195-smoke.mjs
+          node tests/solrak-common-product-v0196-smoke.mjs
+          node tests/solrak-report-detail-v0197-smoke.mjs
+          node tests/solrak-report-detail-v0197-visual-contract.mjs
+      - name: Ventas v0.1.98
+        run: |
+          node tests/solrak-sales-exact-v0198-smoke.mjs
+          node tests/solrak-sales-exact-v0198-contract.mjs
+      - name: Integración de paquete
+        shell: bash
+        run: |
+          rm -rf .tmp-v0198
+          mkdir -p .tmp-v0198/dist
+          cat > .tmp-v0198/dist/index.html <<'HTML'
+          <!doctype html><html><body>
+          <script src="solrak-suma-sales-v0195.js"></script>
+          <script src="solrak-common-product-v0196.js"></script>
+          <script src="solrak-report-detail-v0197.js"></script>
+          </body></html>
+          HTML
+          node scripts/apply-sales-exact-v0198.mjs .tmp-v0198
+          test -f .tmp-v0198/dist/solrak-sales-exact-v0198.js
+          test "$(grep -o 'solrak-sales-exact-v0198.js' .tmp-v0198/dist/index.html | wc -l)" -eq 1
+      - name: Alcance seguro
+        shell: bash
+        run: |
+          if grep -Eqi 'cfdi|finkok|saveProduct|saveInventory|updateProduct|adjustStock|Recargas' solrak-sales-exact-v0198.js; then
+            echo 'Ventas v0.1.98 salió de alcance' >&2
+            exit 1
+          fi
+          echo 'SOLRAK_V0198_SALES_TEST_OK'
