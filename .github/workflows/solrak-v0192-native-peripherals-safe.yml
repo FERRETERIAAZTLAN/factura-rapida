@@ -48,6 +48,13 @@ jobs:
           s=s.replace('showTicketMessage("Último ticket enviado nuevamente a impresión.");','showTicketMessage("Procesando reimpresión…");')
           ticket.write_text(s,encoding='utf-8')
 
+          native=Path('solrak-native-peripherals-v0192.js');n=native.read_text(encoding='utf-8')
+          old='''  const mount=()=>{ensureUi();const badge=byId("solrakN92Bridge");if(badge){info().then(i=>{badge.className="solrakN92Status ok";badge.textContent=i.directPrint?"Windows · impresión directa activa":"Windows · puente activo";}).catch(()=>{badge.className="solrakN92Status bad";badge.textContent="Puente nativo no disponible";});}};\n  new MutationObserver(mount).observe(document.documentElement,{childList:true,subtree:true}); document.addEventListener("DOMContentLoaded",mount); mount();'''
+          new='''  let bridgeChecked=false;\n  const updateBridgeStatus=()=>{const badge=byId("solrakN92Bridge");if(!badge||bridgeChecked)return;bridgeChecked=true;info().then(i=>{if(!badge.isConnected)return;badge.className="solrakN92Status ok";const text=i.directPrint?"Windows · impresión directa activa":"Windows · puente activo";if(badge.textContent!==text)badge.textContent=text;}).catch(()=>{if(!badge.isConnected)return;badge.className="solrakN92Status bad";if(badge.textContent!=="Puente nativo no disponible")badge.textContent="Puente nativo no disponible";});};\n  const mount=()=>{if(!ensureUi())return false;updateBridgeStatus();return true;};\n  const mountObserver=new MutationObserver(()=>{if(mount())mountObserver.disconnect();});mountObserver.observe(document.documentElement,{childList:true,subtree:true});document.addEventListener("DOMContentLoaded",()=>{if(mount())mountObserver.disconnect();});if(mount())mountObserver.disconnect();'''
+          if old in n:n=n.replace(old,new,1)
+          elif 'const mountObserver=new MutationObserver' not in n:raise SystemExit('No se encontró observador v0.1.92 esperado')
+          native.write_text(n,encoding='utf-8')
+
           index=Path('index.html');h=index.read_text(encoding='utf-8')
           tag='<script src="solrak-native-peripherals-v0192.js"></script>'
           anchor='<script src="solrak-peripherals-v0191.js"></script>'
@@ -70,6 +77,7 @@ jobs:
           node tests/solrak-native-peripherals-v0192-smoke.mjs
           if((Get-Content scripts/rebase-fix1-native-v0142.mjs -Raw) -match '\b(alert|confirm|prompt)\s*\('){throw 'El actualizador conserva diálogo browser'}
           if(-not (Get-Content solrak-sumapro-tickets-v0169.js -Raw).Contains('const barcodeValue = rawNumber || number;')){throw 'Código de barras no usa folio exacto'}
+          if(-not (Get-Content solrak-native-peripherals-v0192.js -Raw).Contains('mountObserver.disconnect')){throw 'El montaje de hardware puede quedar observando indefinidamente'}
       - name: Reconstruir base real del EXE
         shell: pwsh
         run: |
@@ -110,9 +118,9 @@ jobs:
       - name: Persistir integración v0.1.92
         shell: pwsh
         run: |
-          if(git diff --quiet -- index.html solrak-sumapro-tickets-v0169.js scripts/rebase-fix1-native-v0142.mjs){Write-Host 'Integración ya persistida.'; exit 0}
+          if(git diff --quiet -- index.html solrak-sumapro-tickets-v0169.js solrak-native-peripherals-v0192.js scripts/rebase-fix1-native-v0142.mjs){Write-Host 'Integración ya persistida.'; exit 0}
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html solrak-sumapro-tickets-v0169.js scripts/rebase-fix1-native-v0142.mjs
+          git add index.html solrak-sumapro-tickets-v0169.js solrak-native-peripherals-v0192.js scripts/rebase-fix1-native-v0142.mjs
           git commit -m 'chore: integrar periféricos nativos v0.1.92'
           git push origin HEAD:feature/v0.1.92-native-peripherals-windows
