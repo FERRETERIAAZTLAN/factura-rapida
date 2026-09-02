@@ -11,6 +11,7 @@
     registers: [],
     openSession: null,
     recentSales: [],
+    promotions: [],
     supplierCount: 0,
   };
   let suppliers = [];
@@ -95,7 +96,7 @@
     const s = document.createElement("style");
     s.id = "frPosStyle";
     s.textContent = `
-.frPosTop{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}.frPosState{display:inline-flex;align-items:center;gap:7px;border-radius:7px;padding:8px 11px;font-size:12px;font-weight:800;background:#fff1f1;color:#9b3434;border:1px solid #eccccc}.frPosState.open{background:#eef9f2;color:#176a3a;border-color:#c8e7d3}.frPosGrid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(360px,.68fr);gap:12px}.frPosSearch input{font-size:16px;padding:12px 14px}.frPosResults{display:grid;gap:5px;margin-top:8px;max-height:390px;overflow:auto}.frPosResult{width:100%;display:grid;grid-template-columns:50px minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px}.frPosResult:hover{border-color:#92baf0;background:#f6faff}.frPosImg{width:50px;height:50px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid #eceff2}.frPosNoImg{width:50px;height:50px;display:grid;place-items:center;border-radius:6px;background:#f3f4f5;color:#8b949d;font-size:8px;text-align:center}.frPosResult strong{display:block;font-size:12px;line-height:1.25}.frPosResult small{display:block;color:var(--muted);margin-top:3px}.frPosResult .rp{text-align:right;font-size:14px;font-weight:900;color:#1769d2;white-space:nowrap}.frTicketBar{display:flex;align-items:stretch;gap:6px;margin:0 0 10px;overflow-x:auto;padding-bottom:2px}.frTicket{min-width:112px;display:grid;grid-template-columns:1fr auto;gap:4px 7px;align-items:center;border:1px solid #d9dfe5;background:#fff;border-radius:7px;padding:7px 8px;text-align:left;color:#45515e;cursor:pointer}.frTicket.active{border-color:#2680eb;background:#eef6ff;color:#155eaf;box-shadow:inset 0 -2px 0 #2680eb}.frTicket strong{font-size:11px}.frTicket small{font-size:9px;color:#718090}.frTicketClose{grid-row:1/3;grid-column:2;width:18px;height:18px;display:grid;place-items:center;border-radius:4px;color:#9aa5af;font-size:14px}.frTicketClose:hover{background:#feecec;color:#ad3535}.frTicketNew{border:1px dashed #aab7c3;background:#f8fafb;border-radius:7px;padding:0 12px;font-weight:800;color:#41617f;white-space:nowrap;cursor:pointer}.frPosCartCard{min-height:280px}.frPosCart{display:grid;gap:0;max-height:360px;overflow:auto;border:1px solid #e0e5e9;border-radius:7px}.frPosLine{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;border-bottom:1px solid #edf0f2;padding:8px 9px;background:#fff}.frPosLine:last-child{border-bottom:0}.frPosLine:hover{background:#f8fbff}.frPosLine strong{display:block;font-size:12px}.frPosLine small{color:var(--muted)}.frPosQty{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}.frPosQty button{width:28px;border:0;background:#f5f6f7}.frPosQty input{width:50px;border:0;text-align:center;padding:5px 2px}.frPosTotals{margin-top:9px;border-top:1px solid var(--line);padding-top:8px}.frPosTotals>div{display:flex;justify-content:space-between;padding:4px 0}.frPosGrand{font-size:29px;font-weight:800;border-top:1px solid var(--line);margin-top:4px;padding-top:9px!important;color:#172433}.frPreview{display:grid;place-items:center;min-height:185px;border:1px solid #e0e5e9;border-radius:8px;background:#fafbfc;overflow:hidden;margin-bottom:10px}.frPreview img{width:100%;height:180px;object-fit:contain;background:#fff}.frPreviewEmpty{color:#8b97a3;font-size:11px;text-align:center;padding:25px}.frPreviewMeta{padding:9px 10px;border-top:1px solid #e6eaee;width:100%;box-sizing:border-box;background:#fff}.frPreviewMeta strong{display:block;font-size:12px}.frPreviewMeta small{display:block;margin-top:3px;color:#738190}.frRecent{display:grid;gap:5px}.frRecentRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;border:1px solid var(--line);border-radius:7px;padding:8px 10px}.frRecentRow small{display:block;color:var(--muted);margin-top:3px}.frSupplierGrid{display:grid;grid-template-columns:minmax(300px,.8fr) minmax(0,1.2fr);gap:16px}.frSupplierList{display:grid;gap:7px;max-height:650px;overflow:auto}.frSupplierRow{border:1px solid var(--line);background:#fff;border-radius:8px;padding:10px 11px;display:flex;justify-content:space-between;gap:10px;text-align:left;width:100%}.frSupplierRow strong{display:block}.frSupplierRow span{display:block;color:var(--muted);font-size:11px;margin-top:3px}.frSupplierForm{display:grid;grid-template-columns:1fr 1fr;gap:10px}.frSupplierForm .wide{grid-column:1/-1}.frPosHint{font-size:11px;color:var(--muted);margin-top:5px}.frPosEmpty{padding:22px 10px;text-align:center;color:var(--muted);font-size:12px}.frPosDialog{border:0;border-radius:10px;padding:0;width:min(500px,calc(100% - 24px));box-shadow:0 24px 80px rgba(0,0,0,.25)}.frPosDialog::backdrop{background:rgba(20,27,34,.60);backdrop-filter:blur(3px)}.frPosDialogInner{padding:18px}.frPayDialog{width:min(920px,calc(100% - 30px));max-width:920px}.frPayHead{height:42px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:#176fd1;color:#fff}.frPayHead strong{font-size:14px}.frPayX{border:0;background:transparent;color:#fff;font-size:24px;cursor:pointer}.frPayBody{padding:14px 18px 17px}.frPaySummary{display:grid;grid-template-columns:180px 1fr 180px;align-items:start;gap:12px}.frPayTicket{font-size:12px;color:#4e5b68}.frPayTicket strong{display:block;color:#172433;font-size:16px;margin-bottom:4px}.frPayTotal{text-align:center}.frPayTotal span{display:block;font-size:28px}.frPayTotal strong{display:block;margin-top:4px;font-size:54px;line-height:1;color:#176fd1;font-weight:500}.frPayMethods{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:18px}.frPayMethod{min-height:108px;border:1px solid #cfd7df;border-radius:7px;background:#fff;padding:12px;text-align:left;cursor:pointer}.frPayMethod:hover{border-color:#8db8ec;background:#f8fbff}.frPayMethod.active{border-color:#176fd1;box-shadow:inset 0 -3px 0 #176fd1;background:#f3f8ff}.frPayMethod b{display:block;font-size:14px;margin-top:9px}.frPayMethod small{display:block;margin-top:5px;color:#738190}.frPayMethodIcon{font-size:24px;color:#176fd1}.frPayFields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:13px}.frPayFields .field{font-size:17px}.frPayBalance{display:flex;justify-content:flex-end;align-items:baseline;gap:14px;margin:16px 0 10px;font-size:26px;color:#be4b4b}.frPayBalance strong{font-size:40px;color:#176fd1;font-weight:500}.frPayActions{display:flex;justify-content:flex-end;gap:9px}.frPayActions button{min-width:150px}.frPosReceipt{padding:10px;border-radius:7px;background:#eef9f2;border:1px solid #cce7d5;color:#176a3a;margin-top:10px}.frPosReceipt strong{font-size:15px}.frSaleDisabled{opacity:.55;pointer-events:none}.frCutReport{font-size:12px}.frCutReport h2{text-align:center;margin:0 0 12px}.frCutGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px 18px;margin-top:12px}.frCutRow{display:flex;justify-content:space-between;border-bottom:1px solid #edf0f2;padding:6px 0}.frCutRow strong.good{color:#278052}.frCutRow strong.bad{color:#b34747}@media(max-width:900px){.frPosGrid,.frSupplierGrid,.frPaySummary{grid-template-columns:1fr}.frSupplierForm{grid-template-columns:1fr}.frSupplierForm .wide{grid-column:auto}.frPosResult{grid-template-columns:44px minmax(0,1fr) auto}.frPosImg,.frPosNoImg{width:44px;height:44px}.frPosCart{max-height:none}.frPayMethods{grid-template-columns:1fr 1fr}.frPayFields{grid-template-columns:1fr}.frPayTotal strong{font-size:42px}}
+.frPosTop{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}.frPosState{display:inline-flex;align-items:center;gap:7px;border-radius:7px;padding:8px 11px;font-size:12px;font-weight:800;background:#fff1f1;color:#9b3434;border:1px solid #eccccc}.frPosState.open{background:#eef9f2;color:#176a3a;border-color:#c8e7d3}.frPosGrid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(360px,.68fr);gap:12px}.frPosSearch input{font-size:16px;padding:12px 14px}.frPosResults{display:grid;gap:5px;margin-top:8px;max-height:390px;overflow:auto}.frPosResult{width:100%;display:grid;grid-template-columns:50px minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px}.frPosResult:hover{border-color:#92baf0;background:#f6faff}.frPosImg{width:50px;height:50px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid #eceff2}.frPosNoImg{width:50px;height:50px;display:grid;place-items:center;border-radius:6px;background:#f3f4f5;color:#8b949d;font-size:8px;text-align:center}.frPosResult strong{display:block;font-size:12px;line-height:1.25}.frPosResult small{display:block;color:var(--muted);margin-top:3px}.frPosResult .rp{text-align:right;font-size:14px;font-weight:900;color:#1769d2;white-space:nowrap}.frPromoTag{display:inline-flex;margin-top:4px;padding:2px 5px;border-radius:3px;background:#fff1cf;color:#8d6200;font-size:9px;font-weight:800}.frOldPrice{display:block;color:#89939c;font-size:10px;font-weight:500;text-decoration:line-through}.frTicketBar{display:flex;align-items:stretch;gap:6px;margin:0 0 10px;overflow-x:auto;padding-bottom:2px}.frTicket{min-width:112px;display:grid;grid-template-columns:1fr auto;gap:4px 7px;align-items:center;border:1px solid #d9dfe5;background:#fff;border-radius:7px;padding:7px 8px;text-align:left;color:#45515e;cursor:pointer}.frTicket.active{border-color:#2680eb;background:#eef6ff;color:#155eaf;box-shadow:inset 0 -2px 0 #2680eb}.frTicket strong{font-size:11px}.frTicket small{font-size:9px;color:#718090}.frTicketClose{grid-row:1/3;grid-column:2;width:18px;height:18px;display:grid;place-items:center;border-radius:4px;color:#9aa5af;font-size:14px}.frTicketClose:hover{background:#feecec;color:#ad3535}.frTicketNew{border:1px dashed #aab7c3;background:#f8fafb;border-radius:7px;padding:0 12px;font-weight:800;color:#41617f;white-space:nowrap;cursor:pointer}.frPosCartCard{min-height:280px}.frPosCart{display:grid;gap:0;max-height:360px;overflow:auto;border:1px solid #e0e5e9;border-radius:7px}.frPosLine{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;border-bottom:1px solid #edf0f2;padding:8px 9px;background:#fff}.frPosLine:last-child{border-bottom:0}.frPosLine:hover{background:#f8fbff}.frPosLine strong{display:block;font-size:12px}.frPosLine small{color:var(--muted)}.frPosQty{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}.frPosQty button{width:28px;border:0;background:#f5f6f7}.frPosQty input{width:50px;border:0;text-align:center;padding:5px 2px}.frPosTotals{margin-top:9px;border-top:1px solid var(--line);padding-top:8px}.frPosTotals>div{display:flex;justify-content:space-between;padding:4px 0}.frPosGrand{font-size:29px;font-weight:800;border-top:1px solid var(--line);margin-top:4px;padding-top:9px!important;color:#172433}.frPreview{display:grid;place-items:center;min-height:185px;border:1px solid #e0e5e9;border-radius:8px;background:#fafbfc;overflow:hidden;margin-bottom:10px}.frPreview img{width:100%;height:180px;object-fit:contain;background:#fff}.frPreviewEmpty{color:#8b97a3;font-size:11px;text-align:center;padding:25px}.frPreviewMeta{padding:9px 10px;border-top:1px solid #e6eaee;width:100%;box-sizing:border-box;background:#fff}.frPreviewMeta strong{display:block;font-size:12px}.frPreviewMeta small{display:block;margin-top:3px;color:#738190}.frRecent{display:grid;gap:5px}.frRecentRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;border:1px solid var(--line);border-radius:7px;padding:8px 10px}.frRecentRow small{display:block;color:var(--muted);margin-top:3px}.frSupplierGrid{display:grid;grid-template-columns:minmax(300px,.8fr) minmax(0,1.2fr);gap:16px}.frSupplierList{display:grid;gap:7px;max-height:650px;overflow:auto}.frSupplierRow{border:1px solid var(--line);background:#fff;border-radius:8px;padding:10px 11px;display:flex;justify-content:space-between;gap:10px;text-align:left;width:100%}.frSupplierRow strong{display:block}.frSupplierRow span{display:block;color:var(--muted);font-size:11px;margin-top:3px}.frSupplierForm{display:grid;grid-template-columns:1fr 1fr;gap:10px}.frSupplierForm .wide{grid-column:1/-1}.frPosHint{font-size:11px;color:var(--muted);margin-top:5px}.frPosEmpty{padding:22px 10px;text-align:center;color:var(--muted);font-size:12px}.frPosDialog{border:0;border-radius:10px;padding:0;width:min(500px,calc(100% - 24px));box-shadow:0 24px 80px rgba(0,0,0,.25)}.frPosDialog::backdrop{background:rgba(20,27,34,.60);backdrop-filter:blur(3px)}.frPosDialogInner{padding:18px}.frPayDialog{width:min(920px,calc(100% - 30px));max-width:920px}.frPayHead{height:42px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:#176fd1;color:#fff}.frPayHead strong{font-size:14px}.frPayX{border:0;background:transparent;color:#fff;font-size:24px;cursor:pointer}.frPayBody{padding:14px 18px 17px}.frPaySummary{display:grid;grid-template-columns:180px 1fr 180px;align-items:start;gap:12px}.frPayTicket{font-size:12px;color:#4e5b68}.frPayTicket strong{display:block;color:#172433;font-size:16px;margin-bottom:4px}.frPayTotal{text-align:center}.frPayTotal span{display:block;font-size:28px}.frPayTotal strong{display:block;margin-top:4px;font-size:54px;line-height:1;color:#176fd1;font-weight:500}.frPayMethods{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin-top:18px}.frPayMethod{min-height:108px;border:1px solid #cfd7df;border-radius:7px;background:#fff;padding:12px;text-align:left;cursor:pointer}.frPayMethod:hover{border-color:#8db8ec;background:#f8fbff}.frPayMethod.active{border-color:#176fd1;box-shadow:inset 0 -3px 0 #176fd1;background:#f3f8ff}.frPayMethod.blocked{border-color:#e5c4c4;background:#fff8f8}.frPayMethod b{display:block;font-size:14px;margin-top:9px}.frPayMethod small{display:block;margin-top:5px;color:#738190}.frPayMethodIcon{font-size:24px;color:#176fd1}.frPayFields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:13px}.frPayFields .field{font-size:17px}.frPayBalance{display:flex;justify-content:flex-end;align-items:baseline;gap:14px;margin:16px 0 10px;font-size:26px;color:#be4b4b}.frPayBalance strong{font-size:40px;color:#176fd1;font-weight:500}.frPayActions{display:flex;justify-content:flex-end;gap:9px}.frPayActions button{min-width:150px}.frPosReceipt{padding:10px;border-radius:7px;background:#eef9f2;border:1px solid #cce7d5;color:#176a3a;margin-top:10px}.frPosReceipt strong{font-size:15px}.frSaleDisabled{opacity:.55;pointer-events:none}.frCutReport{font-size:12px}.frCutReport h2{text-align:center;margin:0 0 12px}.frCutGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px 18px;margin-top:12px}.frCutRow{display:flex;justify-content:space-between;border-bottom:1px solid #edf0f2;padding:6px 0}.frCutRow strong.good{color:#278052}.frCutRow strong.bad{color:#b34747}@media(max-width:900px){.frPosGrid,.frSupplierGrid,.frPaySummary{grid-template-columns:1fr}.frSupplierForm{grid-template-columns:1fr}.frSupplierForm .wide{grid-column:auto}.frPosResult{grid-template-columns:44px minmax(0,1fr) auto}.frPosImg,.frPosNoImg{width:44px;height:44px}.frPosCart{max-height:none}.frPayMethods{grid-template-columns:1fr 1fr}.frPayFields{grid-template-columns:1fr}.frPayTotal strong{font-size:42px}}
 `;
     document.head.appendChild(s);
   }
@@ -149,7 +150,7 @@
     const payDlg = document.createElement("dialog");
     payDlg.id = "posPayDialog";
     payDlg.className = "frPosDialog frPayDialog";
-    payDlg.innerHTML = `<div class="frPayHead"><strong>Finalizar venta</strong><button class="frPayX" type="button" data-pos-close="posPayDialog" aria-label="Cerrar">×</button></div><div class="frPayBody"><div class="frPaySummary"><div class="frPayTicket"><strong id="posPayTicket">Ticket #1</strong><span id="posPayItems">0 productos</span></div><div class="frPayTotal"><span>Total de la venta</span><strong id="posPayTotal">$0.00</strong></div><div class="frPaySecure">Cobro seguro<br><small>Una sola operación</small></div></div><p class="frPayInstruction">Captura uno o combina varios métodos. La suma debe cubrir exactamente el total.</p><div class="frPayMethods"><div class="frPayMethod active" data-pay-card="cash"><span class="frPayMethodIcon">$</span><b>Efectivo</b><label>Monto<input class="frPayAmount" data-pay-amount="cash" type="number" min="0" step="0.01" inputmode="decimal" value="0.00"></label></div><div class="frPayMethod" data-pay-card="card"><span class="frPayMethodIcon">▣</span><b>Tarjeta</b><label>Monto<input class="frPayAmount" data-pay-amount="card" type="number" min="0" step="0.01" inputmode="decimal" value="0.00"></label></div><div class="frPayMethod" data-pay-card="transfer"><span class="frPayMethodIcon">⇄</span><b>Transferencia</b><label>Monto<input class="frPayAmount" data-pay-amount="transfer" type="number" min="0" step="0.01" inputmode="decimal" value="0.00"></label></div><div class="frPayMethod" data-pay-card="other"><span class="frPayMethodIcon">•••</span><b>Otro</b><label>Monto<input class="frPayAmount" data-pay-amount="other" type="number" min="0" step="0.01" inputmode="decimal" value="0.00"></label></div></div><input id="posPayment" type="hidden" value="cash"><div class="frPayDetails"><div id="posCashFields"><label>Efectivo recibido<input id="posTendered" class="field" type="number" min="0" step="0.01" inputmode="decimal" placeholder="$0.00"></label><div class="frPayChange">Cambio <strong id="posChange">$0.00</strong></div></div><label id="posReferenceWrap">Referencia general<input id="posReference" class="field" maxlength="120" placeholder="Opcional para pagos electrónicos"></label><label>Nota de venta<textarea id="posSaleNote" class="field" rows="2" maxlength="500" placeholder="Opcional"></textarea></label></div><div class="frPayFooter"><div class="frPayPaid"><span>Total en pagos</span><strong id="posPaidTotal">$0.00</strong></div><div class="frPayBalance"><span id="posBalanceLabel">Faltan</span><strong id="posBalance">$0.00</strong></div><div class="frPayActions"><button class="secondary" type="button" data-pos-close="posPayDialog">Cerrar</button><button id="posConfirmCharge" class="primary" type="button">Aceptar cobro</button></div></div></div>`;
+    payDlg.innerHTML = `<div class="frPayHead"><strong>Finalizar venta</strong><button class="frPayX" type="button" data-pos-close="posPayDialog" aria-label="Cerrar">×</button></div><div class="frPayBody"><div class="frPaySummary"><div class="frPayTicket"><strong id="posPayTicket">Ticket #1</strong><span id="posPayItems">0 productos</span></div><div class="frPayTotal"><span>Total de la venta</span><strong id="posPayTotal">$0.00</strong></div><div class="frPaySecure">Cobro seguro<br><small>Una sola operación</small></div></div><p class="frPayInstruction">Captura uno o combina varios métodos. La suma debe cubrir exactamente el total.</p><div class="frPayMethods"><div class="frPayMethod active" data-pay-card="cash"><span class="frPayMethodIcon">$</span><b>Efectivo</b><label>Monto<input class="frPayAmount" data-pay-amount="cash" type="number" min="0" step="0.01" inputmode="decimal" value="0.00"></label></div><div class="frPayMethod" data-pay-card="card"><span class="frPayMethodIcon">▣</span><b>Tarjeta</b><label>Monto<input class="frPayAmount" data-pay-amount="card" type="number" min="0" step="0.01" inputmode="decimal" value="0.00"></label></div><div class="frPayMethod" data-pay-card="transfer"><span class="frPayMethodIcon">⇄</span><b>Transferencia</b><label>Monto<input class="frPayAmount" data-pay-amount="transfer" type="number" min="0" step="0.01" inputmode="decimal" value="0.00"></label></div><div class="frPayMethod" data-pay-card="credit"><span class="frPayMethodIcon">◷</span><b>Crédito</b><label>Monto<input class="frPayAmount" data-pay-amount="credit" type="number" min="0" step="0.01" inputmode="decimal" value="0.00"></label><small id="posCreditHint">Requiere cliente</small></div><div class="frPayMethod" data-pay-card="other"><span class="frPayMethodIcon">•••</span><b>Otro</b><label>Monto<input class="frPayAmount" data-pay-amount="other" type="number" min="0" step="0.01" inputmode="decimal" value="0.00"></label></div></div><input id="posPayment" type="hidden" value="cash"><div class="frPayDetails"><div id="posCashFields"><label>Efectivo recibido<input id="posTendered" class="field" type="number" min="0" step="0.01" inputmode="decimal" placeholder="$0.00"></label><div class="frPayChange">Cambio <strong id="posChange">$0.00</strong></div></div><label id="posReferenceWrap">Referencia general<input id="posReference" class="field" maxlength="120" placeholder="Opcional para pagos electrónicos"></label><label>Nota de venta<textarea id="posSaleNote" class="field" rows="2" maxlength="500" placeholder="Opcional"></textarea></label></div><div class="frPayFooter"><div class="frPayPaid"><span>Total en pagos</span><strong id="posPaidTotal">$0.00</strong></div><div class="frPayBalance"><span id="posBalanceLabel">Faltan</span><strong id="posBalance">$0.00</strong></div><div class="frPayActions"><button class="secondary" type="button" data-pos-close="posPayDialog">Cerrar</button><button id="posConfirmCharge" class="primary" type="button">Aceptar cobro</button></div></div></div>`;
     document.body.appendChild(payDlg);
     const cutDlg = document.createElement("dialog");
     cutDlg.id = "posCutDialog";
@@ -189,6 +190,7 @@
         .join("");
     if (clients.some((c) => c.id === desired)) el.value = desired;
     else el.value = "";
+    updatePayment();
   }
   function matchProduct(p, q) {
     return (
@@ -205,6 +207,67 @@
       .filter((p) => p.active !== false && matchProduct(p, q))
       .slice(0, 24);
   }
+  function activePromotion(productId) {
+    const now = Date.now();
+    return (posState.promotions || [])
+      .filter((promotion) => {
+        if (!promotion?.active || promotion.product_id !== productId)
+          return false;
+        const starts = promotion.starts_at
+          ? new Date(promotion.starts_at).getTime()
+          : null;
+        const ends = promotion.ends_at
+          ? new Date(promotion.ends_at).getTime()
+          : null;
+        return (
+          (!Number.isFinite(starts) || starts <= now) &&
+          (!Number.isFinite(ends) || ends >= now)
+        );
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime(),
+      )[0];
+  }
+  function effectiveProduct(product) {
+    if (!product || product.custom) return product;
+    const promotion = activePromotion(product.id);
+    const listPrice = Math.max(
+      0,
+      Number(product.list_price ?? product.price) || 0,
+    );
+    if (!promotion)
+      return {
+        ...product,
+        list_price: listPrice,
+        price: listPrice,
+        promotion_id: null,
+        promotion_name: null,
+      };
+    const value = Math.max(0, Number(promotion.value) || 0);
+    const price =
+      promotion.discount_type === "percent"
+        ? listPrice * (1 - Math.min(value, 100) / 100)
+        : Math.min(listPrice, value);
+    return {
+      ...product,
+      list_price: listPrice,
+      price: Math.max(0, Math.round(price * 100) / 100),
+      promotion_id: promotion.id,
+      promotion_name: promotion.name,
+    };
+  }
+  function syncPromotionPrices() {
+    posTickets.forEach((ticket) => {
+      ticket.cart.forEach((line) => {
+        if (line.custom) return;
+        const source = products.find((product) => product.id === line.id);
+        if (!source) return;
+        Object.assign(line, effectiveProduct(source), { qty: line.qty });
+      });
+    });
+  }
   function renderProductPreview(p) {
     const box = byId("posProductPreview");
     if (!box) return;
@@ -215,7 +278,10 @@
     }
     selectedProductId = p.id;
     const u = imageUrl(p);
-    box.innerHTML = `${u ? `<img loading="lazy" src="${u}" alt="${htmlEsc(p.name)}">` : '<div class="frPreviewEmpty">Este producto todavía no tiene imagen.</div>'}<div class="frPreviewMeta"><strong>${htmlEsc(p.name)}</strong><small>${htmlEsc(p.code || "Sin código")} · Exist. ${Number(p.stock) || 0} · ${mx(p.price)}</small></div>`;
+    const availability = p.custom
+      ? "Producto común · sin inventario"
+      : `${htmlEsc(p.code || "Sin código")} · Exist. ${Number(p.stock) || 0}`;
+    box.innerHTML = `${u ? `<img loading="lazy" src="${u}" alt="${htmlEsc(p.name)}">` : `<div class="frPreviewEmpty">${p.custom ? "Producto común" : "Este producto todavía no tiene imagen."}</div>`}<div class="frPreviewMeta"><strong>${htmlEsc(p.name)}</strong><small>${availability} · ${mx(p.price)}</small></div>`;
   }
   function renderResults() {
     const box = byId("posResults");
@@ -227,8 +293,9 @@
     box.innerHTML = rows.length
       ? rows
           .map((p) => {
-            const u = imageUrl(p);
-            return `<button class="frPosResult" type="button" data-pos-product="${p.id}">${u ? `<img class="frPosImg" loading="lazy" src="${u}" alt="">` : '<span class="frPosNoImg">SIN FOTO</span>'}<span><strong>${htmlEsc(p.name)}</strong><small>${htmlEsc(p.code || "Sin código")} · Exist. ${Number(p.stock) || 0} · ${htmlEsc(p.unit || "Pieza")}</small></span><span class="rp">${mx(p.price)}</span></button>`;
+            const u = imageUrl(p),
+              priced = effectiveProduct(p);
+            return `<button class="frPosResult" type="button" data-pos-product="${p.id}">${u ? `<img class="frPosImg" loading="lazy" src="${u}" alt="">` : '<span class="frPosNoImg">SIN FOTO</span>'}<span><strong>${htmlEsc(p.name)}</strong><small>${htmlEsc(p.code || "Sin código")} · Exist. ${Number(p.stock) || 0} · ${htmlEsc(p.unit || "Pieza")}</small>${priced.promotion_name ? `<span class="frPromoTag">${htmlEsc(priced.promotion_name)}</span>` : ""}</span><span class="rp">${priced.promotion_name ? `<span class="frOldPrice">${mx(priced.list_price)}</span>` : ""}${mx(priced.price)}</span></button>`;
           })
           .join("")
       : `<div class="frPosEmpty">${query ? "No encontré productos." : "Escanea un código o escribe para buscar."}</div>`;
@@ -244,7 +311,8 @@
   }
   function addProduct(p) {
     if (!p) return;
-    renderProductPreview(p);
+    const priced = effectiveProduct(p);
+    renderProductPreview(priced);
     if (Number(p.stock) <= 0) {
       notice("Este producto no tiene existencia disponible.", true);
       return;
@@ -255,13 +323,54 @@
         notice("No hay suficiente existencia para agregar otra unidad.", true);
         return;
       }
+      Object.assign(line, priced, { qty: Number(line.qty) });
       line.qty = Number(line.qty) + 1;
-    } else posCart.push({ ...p, qty: 1 });
+    } else posCart.push({ ...priced, qty: 1 });
     currentTicket().cart = posCart;
     byId("posSearch").value = "";
     renderResults();
     renderCart();
     renderTickets();
+  }
+  function addCommonProduct(input = {}) {
+    const qty = Math.max(0.001, Number(input.qty) || 1);
+    const cost = Math.max(0, Number(input.cost) || 0);
+    const price = Math.max(0, Number(input.price) || 0);
+    const name = cleanCommonName(input.name);
+    if (!name) {
+      notice("Escribe el nombre del producto.", true);
+      return false;
+    }
+    if (!(price > 0)) {
+      notice("Escribe un precio público mayor a cero.", true);
+      return false;
+    }
+    const id = `common-${crypto.randomUUID?.() || Date.now()}`;
+    const item = {
+      id,
+      product_id: null,
+      custom: true,
+      code: "",
+      name,
+      description: "Producto común",
+      unit: "Pieza",
+      cost,
+      price,
+      wholesale: 0,
+      stock: Number.MAX_SAFE_INTEGER,
+      iva: Number.isFinite(Number(input.iva)) ? Math.max(0, Number(input.iva)) : 16,
+      price_includes_tax: input.price_includes_tax !== false,
+      qty,
+    };
+    posCart.push(item);
+    currentTicket().cart = posCart;
+    renderProductPreview(item);
+    renderCart();
+    renderTickets();
+    return true;
+  }
+  function cleanCommonName(value) {
+    return String(value || "").trim().slice(0, 180);
   }
   function renderCart() {
     const box = byId("posCart");
@@ -275,7 +384,7 @@
       ? posCart
           .map(
             (i) =>
-              `<div class="frPosLine" data-pos-line="${i.id}"><div class="frPosCode">${htmlEsc(i.code || "—")}</div><div class="frPosProduct"><strong>${htmlEsc(i.name)}</strong><small>Exist. ${Number(i.stock) || 0} · ${htmlEsc(i.unit || "Pieza")}</small></div><div class="frPosQty"><button type="button" data-pos-q="minus" data-id="${i.id}" aria-label="Restar">−</button><input data-pos-qty="${i.id}" type="number" min="0.001" step="0.001" value="${Number(i.qty)}"><button type="button" data-pos-q="plus" data-id="${i.id}" aria-label="Sumar">+</button></div><div class="frPosUnitPrice">${mx(i.price)}</div><div class="frPosLineTotal"><strong>${mx(lineAmounts(i).total)}</strong><button class="trash" type="button" data-pos-q="remove" data-id="${i.id}" aria-label="Eliminar">×</button></div></div>`,
+              `<div class="frPosLine" data-pos-line="${i.id}"><div class="frPosCode">${htmlEsc(i.code || "—")}</div><div class="frPosProduct"><strong>${htmlEsc(i.name)}</strong><small>${i.custom ? "Sin inventario" : `Exist. ${Number(i.stock) || 0}`} · ${htmlEsc(i.unit || "Pieza")}</small></div><div class="frPosQty"><button type="button" data-pos-q="minus" data-id="${i.id}" aria-label="Restar">−</button><input data-pos-qty="${i.id}" type="number" min="0.001" step="0.001" value="${Number(i.qty)}"><button type="button" data-pos-q="plus" data-id="${i.id}" aria-label="Sumar">+</button></div><div class="frPosUnitPrice">${mx(i.price)}</div><div class="frPosLineTotal"><strong>${mx(lineAmounts(i).total)}</strong><button class="trash" type="button" data-pos-q="remove" data-id="${i.id}" aria-label="Eliminar">×</button></div></div>`,
           )
           .join("")
       : '<div class="frPosEmpty">Escanea o agrega productos para comenzar.</div>';
@@ -464,7 +573,9 @@
       excess = Math.max(0, Math.round((paid - total) * 100) / 100),
       change = cash
         ? Math.max(0, Math.round((tendered - cash.amount) * 100) / 100)
-        : 0;
+        : 0,
+      credit = payments.find((payment) => payment.method === "credit"),
+      hasClient = Boolean(currentTicket()?.clientId);
     document.querySelectorAll("[data-pay-card]").forEach((card) => {
       card.classList.toggle(
         "active",
@@ -472,6 +583,13 @@
       );
     });
     byId("posCashFields")?.classList.toggle("hidden", !cash);
+    document
+      .querySelector('[data-pay-card="credit"]')
+      ?.classList.toggle("blocked", Boolean(credit && !hasClient));
+    if (byId("posCreditHint"))
+      byId("posCreditHint").textContent = hasClient
+        ? "Se cargará al saldo del cliente"
+        : "Selecciona un cliente";
     byId("posChange").textContent = mx(change);
     if (byId("posPaidTotal")) byId("posPaidTotal").textContent = mx(paid);
     if (byId("posBalance"))
@@ -480,7 +598,8 @@
       byId("posBalanceLabel").textContent =
         remaining > 0 ? "Faltan" : excess > 0 ? "Sobran" : "Pagado";
     if (byId("posConfirmCharge"))
-      byId("posConfirmCharge").disabled = Math.abs(paid - total) > 0.01;
+      byId("posConfirmCharge").disabled =
+        Math.abs(paid - total) > 0.01 || Boolean(credit && !hasClient);
   }
   function updateChargeButton() {
     const b = byId("posCharge");
@@ -566,6 +685,7 @@
     try {
       const d = await posApi("bootstrap");
       posState = { ...posState, ...d };
+      syncPromotionPrices();
       renderState();
       renderRecent();
       renderClients();
@@ -599,13 +719,34 @@
       updatePayment();
       return;
     }
+    if (
+      payments.some((payment) => payment.method === "credit") &&
+      !currentTicket()?.clientId
+    ) {
+      notice("Selecciona un cliente para registrar una venta a crédito.", true);
+      return;
+    }
     syncTicket();
     const chargedTicket = currentTicket(),
-      items = posCart.map((x) => ({ product_id: x.id, qty: Number(x.qty) })),
+      items = posCart.map((x) =>
+        x.custom
+          ? {
+              product_id: null,
+              custom: true,
+              name: cleanCommonName(x.name),
+              unit: x.unit || "Pieza",
+              qty: Number(x.qty),
+              unit_price: Number(x.price),
+              cost: Number(x.cost) || 0,
+              iva_rate: Number(x.iva) || 0,
+              price_includes_tax: x.price_includes_tax !== false,
+            }
+          : { product_id: x.id, qty: Number(x.qty) },
+      ),
       receiptItems = posCart.map((x) => {
         const amounts = lineAmounts(x);
         return {
-          productId: x.id,
+          productId: x.custom ? null : x.id,
           code: x.code || "",
           name: x.name || "Producto",
           qty: Number(x.qty) || 0,
@@ -939,6 +1080,14 @@
     newTicket,
     switchTicket: activateTicket,
     openPayment,
+    addCommonProduct,
+    api: posApi,
+    rerender() {
+      renderClients();
+      renderResults();
+      renderCart();
+      renderTickets();
+    },
     get cart() {
       return posCart;
     },

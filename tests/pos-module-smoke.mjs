@@ -63,19 +63,35 @@ window.fetch = async (url, opt = {}) => {
         openSession: null,
         openSessions: [],
         recentSales: [],
+        promotions: [
+          {
+            id: "promo1",
+            product_id: "p1",
+            name: "Promoción prueba",
+            discount_type: "percent",
+            value: 10,
+            active: true,
+            created_at: new Date().toISOString(),
+          },
+        ],
         supplierCount: 0,
       };
-    else if (body.action === "completeSale")
+    else if (body.action === "completeSale") {
+      const custom = body.items?.find((item) => item.custom);
+      const total = custom
+        ? Number(custom.unit_price) * Number(custom.qty)
+        : 11.7;
       data = {
         ok: true,
         sale_id: "s1",
         sale_number: 1,
-        subtotal: 11.21,
-        iva: 1.79,
-        total: 13,
+        subtotal: total / 1.16,
+        iva: total - total / 1.16,
+        total,
         currency: "MXN",
         items: 1,
       };
+    }
   } else if (String(url).includes("/supplier-api")) {
     if (body.action === "listSuppliers") data = { ok: true, suppliers: [] };
   }
@@ -107,6 +123,10 @@ initialSearch.dispatchEvent(new window.Event("input", { bubbles: true }));
 assert(
   window.document.querySelector('[data-pos-product="p1"]'),
   "No se renderizó producto en POS",
+);
+assert(
+  window.document.getElementById("posResults").textContent.includes("Promoción prueba"),
+  "La promoción activa no aparece en el buscador",
 );
 assert(
   calls.some((x) => x.action === "bootstrap"),
@@ -170,8 +190,8 @@ assert(
   "Forma de pago incorrecta",
 );
 assert(
-  Number(sales[0].body.payments?.[0]?.amount) === 13,
-  "Total enviado incorrecto",
+  Number(sales[0].body.payments?.[0]?.amount) === 11.7,
+  "El total promocional enviado es incorrecto",
 );
 assert(
   Number(sales[0].body.payments?.[0]?.tendered) === 20,
@@ -188,6 +208,53 @@ assert(
   "No se mostró confirmación de venta",
 );
 
+// Producto común y crédito usan el mismo cobro atómico, sin tocar inventario.
+assert(
+  !window.FacturaRapidaPOS.addCommonProduct({ price: 15 }),
+  "Producto común aceptó un renglón sin nombre",
+);
+assert(
+  window.FacturaRapidaPOS.cart.length === 0,
+  "Producto común sin nombre alteró el ticket",
+);
+assert(
+  window.FacturaRapidaPOS.addCommonProduct({
+    name: "Servicio de corte",
+    qty: 2,
+    cost: 3,
+    price: 15,
+  }),
+  "Producto común no se agregó",
+);
+window.FacturaRapidaPOS.state.openSession = {
+  id: "cs1",
+  opened_at: new Date().toISOString(),
+};
+const client = window.document.getElementById("posClient");
+client.value = "c1";
+client.dispatchEvent(new window.Event("change", { bubbles: true }));
+window.FacturaRapidaPOS.openPayment();
+const cashAmount = window.document.querySelector('[data-pay-amount="cash"]');
+const creditAmount = window.document.querySelector('[data-pay-amount="credit"]');
+cashAmount.value = "0.00";
+creditAmount.value = "30.00";
+creditAmount.dispatchEvent(new window.Event("input", { bubbles: true }));
+window.document.getElementById("posConfirmCharge").click();
+await new Promise((r) => setTimeout(r, 80));
+const creditSale = calls.filter((x) => x.action === "completeSale")[1];
+assert(creditSale?.body.clientId === "c1", "El crédito no conservó el cliente");
+assert(
+  creditSale?.body.payments?.[0]?.method === "credit" &&
+    Number(creditSale.body.payments[0].amount) === 30,
+  "La venta a crédito no envió el método o importe correcto",
+);
+assert(
+  creditSale?.body.items?.[0]?.product_id === null &&
+    creditSale.body.items[0].name === "Servicio de corte" &&
+    Number(creditSale.body.items[0].unit_price) === 15,
+  "Producto común no conservó su descripción y precio",
+);
+
 console.log(
-  "POS_UI_SMOKE_OK tabs=2 scan=ok completeSaleCalls=1 noRealBackendWrites=true",
+  "POS_UI_SMOKE_OK tabs=2 scan=ok promotion=ok credit=ok commonProduct=ok completeSaleCalls=2 noRealBackendWrites=true",
 );

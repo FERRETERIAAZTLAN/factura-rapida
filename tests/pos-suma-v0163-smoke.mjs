@@ -107,7 +107,8 @@ assert(
   "No existe modal Finalizar venta",
 );
 assert(
-  window.document.querySelectorAll("[data-pay-amount]").length === 4,
+  window.document.querySelectorAll("[data-pay-amount]").length >= 4 &&
+    window.document.querySelector('[data-pay-amount="credit"]'),
   "Métodos de pago funcionales incompletos",
 );
 assert(
