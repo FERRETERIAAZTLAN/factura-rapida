@@ -17,4 +17,4 @@ jobs:
       - name: Ejecutar release Windows v0.1.94 corregido
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run windows-release-v0194-r2.yml --ref release/v0.1.94-hardware
+        run: gh workflow run windows-release-v0194-r2.yml -R "$GITHUB_REPOSITORY" --ref release/v0.1.94-hardware
