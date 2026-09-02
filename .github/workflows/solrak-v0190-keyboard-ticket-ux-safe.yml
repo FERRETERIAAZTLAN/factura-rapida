@@ -59,6 +59,7 @@ jobs:
           grep -q 'confirmReturnImpact' solrak-sumapro-fiel-v0171.js
           grep -q 'SOLRAKDialog.confirm' quotes-module.js
           grep -q 'SOLRAKDialog.prompt' quotes-email-module.js
+          grep -q 'body.loading::after' solrak-keyboard-ticket-ux-v0190.js
           grep -q 'solrak-keyboard-ticket-ux-v0190.js' index.html
       - name: Guardas de alcance
         run: |
@@ -69,6 +70,6 @@ jobs:
           if git diff --quiet; then echo 'Sin cambios pendientes.'; exit 0; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html pos-module.js solrak-sumapro-fiel-v0171.js solrak-sumapro-tickets-v0169.js solrak-shifts-v0189.js quotes-email-module.js quotes-module.js solrak-flow-v0173.js solrak-held-tickets-v0176.js solrak-price-verifier-v0177.js solrak-reports-v0172.js solrak-sales-v0174.js
-          git commit -m 'chore: eliminar diálogos nativos UX v0.1.90'
+          git add index.html pos-module.js solrak-sumapro-fiel-v0171.js solrak-sumapro-tickets-v0169.js solrak-shifts-v0189.js quotes-email-module.js quotes-module.js solrak-flow-v0173.js solrak-held-tickets-v0176.js solrak-price-verifier-v0177.js solrak-reports-v0172.js solrak-sales-v0174.js solrak-keyboard-ticket-ux-v0190.js
+          git commit -m 'chore: integrar densidad y UX completa v0.1.90'
           git push origin HEAD:feature/v0.1.90-keyboard-ticket-ux
