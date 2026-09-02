@@ -10,31 +10,22 @@ page.on('console', (message) => {
   if (message.type() === 'error') consoleErrors.push(message.text());
 });
 
-const scripts = [
-  ['solrak-suma-sales-v0195.js', 'SOLRAKSumaSalesV0195'],
-  ['solrak-sales-exact-v0198.js', 'SOLRAKSalesExactV0198'],
-  ['solrak-sales-photo-v0199.js', 'SOLRAKSalesPhotoV0199'],
-  ['solrak-sales-reference-v0200.js', 'SOLRAKSalesReferenceV0200'],
-  ['solrak-sales-suma-v0201.js', 'SOLRAKSalesSumaV0201'],
-  ['solrak-sales-suma-v0201-tune.js', 'SOLRAKSalesSumaV0201Tune']
-];
-
 try {
-  await page.goto('http://127.0.0.1:4173/tests/fixtures/solrak-sales-suma-v0201.html', { waitUntil: 'domcontentloaded' });
+  // Cargamos el DOM real de la fixture sin depender de un servidor HTTP ni del
+  // timing de las capas visuales antiguas. La integración completa de scripts
+  // se valida en el paso de paquete; aquí medimos únicamente el layout final.
+  const fixture = fs.readFileSync('tests/fixtures/solrak-sales-suma-v0201.html', 'utf8')
+    .replace(/<script\s+src="\/[^"]+"><\/script>/g, '');
+  await page.setContent(fixture, { waitUntil: 'domcontentloaded' });
 
-  // La prueba visual no depende del timing del servidor para cargar los scripts.
-  // Si el fixture no alcanzó a cargar alguno, Playwright lo inyecta directamente
-  // desde el checkout real de la rama antes de medir la geometría.
-  for (const [path, globalName] of scripts) {
-    const loaded = await page.evaluate((name) => Boolean(window[name]), globalName);
-    if (!loaded) await page.addScriptTag({ path });
-  }
+  // v0.1.98 construye el menú real que v0.2.01 conserva. Después cargamos
+  // solamente la capa estructural final y su calibración visual.
+  await page.addScriptTag({ path: 'solrak-sales-exact-v0198.js' });
+  await page.addScriptTag({ path: 'solrak-sales-suma-v0201.js' });
+  await page.addScriptTag({ path: 'solrak-sales-suma-v0201-tune.js' });
 
-  await page.waitForFunction(() => Boolean(window.SOLRAKSalesSumaV0201 && window.SOLRAKSalesSumaV0201Tune), null, { timeout: 5000 });
   await page.evaluate(() => {
     window.SOLRAKSalesExactV0198?.mount?.();
-    window.SOLRAKSalesPhotoV0199?.mount?.();
-    window.SOLRAKSalesReferenceV0200?.mount?.();
     window.SOLRAKSalesSumaV0201?.mount?.();
     window.SOLRAKSalesSumaV0201Tune?.mount?.();
   });
