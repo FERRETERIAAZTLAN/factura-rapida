@@ -1,0 +1,18 @@
+RUN=33614857857
+HEAD=11e50df8a2322a53b258f62cba3106efce2a3a95
+runlogs/release-windows/13_Aceptaci├│n EXE real.txt:13:2026-09-02T09:46:10.6793120Z [36;1m      $base=$txt.Contains("START $env:FR_VERSION") -and $txt.Contains("SETUP_OK $env:FR_VERSION") -and $txt.Contains('PAGE_LOAD Started') -and $txt.Contains('PAGE_LOAD Finished')[0m
+runlogs/release-windows/13_Aceptaci├│n EXE real.txt:14:2026-09-02T09:46:10.6793912Z [36;1m      $dom=$txt.Contains('WEBVIEW_MILESTONE DOM_CONTENT_LOADED')[0m
+runlogs/release-windows/13_Aceptaci├│n EXE real.txt:15:2026-09-02T09:46:10.6794835Z [36;1m      $ready=$txt.Contains('WEBVIEW_MILESTONE LOGIN_HIT_FOCUS_OK') -and $txt.Contains('LOGIN_UI_READY ') -and $txt.Contains('"ok":true') -and $txt.Contains('"hitOk":true') -and $txt.Contains('"focusOk":true')[0m
+runlogs/release-windows/13_Aceptaci├│n EXE real.txt:19:2026-09-02T09:46:10.6796994Z [36;1m  if(-not $ok){$txt=if(Test-Path $log){Get-Content $log -Raw}else{'(sin log)'};throw "EXE real no pasó aceptación: $txt"}[0m
+runlogs/release-windows/13_Aceptaci├│n EXE real.txt:21:2026-09-02T09:46:10.6797998Z [36;1m  if($p.HasExited){throw 'EXE se cerró después de LOGIN_UI_READY'}[0m
+runlogs/release-windows/13_Aceptaci├│n EXE real.txt:40:2026-09-02T09:48:50.8625974Z [31;1m[0m[36;1m[36;1m  19 | [0m … log -Raw}else{'(sin log)'};[36;1mthrow "EXE real no pasó aceptación: $txt"[0m}[0m
+runlogs/release-windows/13_Aceptaci├│n EXE real.txt:42:2026-09-02T09:48:50.8628457Z [31;1m[0m[36;1m[36;1m[0m[36;1m[0m[36;1m[31;1m[31;1m[36;1m     | [31;1mEXE real no pasó aceptación: START 0.1.94 SETUP_OK 0.1.94 PAGE_LOAD Started http://tauri.localhost/[0m
+runlogs/release-windows/13_Aceptaci├│n EXE real.txt:43:2026-09-02T09:48:50.8632702Z [31;1m[0m[36;1m[36;1m[0m[36;1m[0m[36;1m[31;1m[31;1m[36;1m[31;1m[36;1m     | [31;1mWEBVIEW_MILESTONE DOM_CONTENT_LOADED {"readyState":"interactive"}[0m
+runlogs/0_release-windows.txt:2038:2026-09-02T09:46:10.6793124Z [36;1m      $base=$txt.Contains("START $env:FR_VERSION") -and $txt.Contains("SETUP_OK $env:FR_VERSION") -and $txt.Contains('PAGE_LOAD Started') -and $txt.Contains('PAGE_LOAD Finished')[0m
+runlogs/0_release-windows.txt:2039:2026-09-02T09:46:10.6793915Z [36;1m      $dom=$txt.Contains('WEBVIEW_MILESTONE DOM_CONTENT_LOADED')[0m
+runlogs/0_release-windows.txt:2040:2026-09-02T09:46:10.6794838Z [36;1m      $ready=$txt.Contains('WEBVIEW_MILESTONE LOGIN_HIT_FOCUS_OK') -and $txt.Contains('LOGIN_UI_READY ') -and $txt.Contains('"ok":true') -and $txt.Contains('"hitOk":true') -and $txt.Contains('"focusOk":true')[0m
+runlogs/0_release-windows.txt:2044:2026-09-02T09:46:10.6796997Z [36;1m  if(-not $ok){$txt=if(Test-Path $log){Get-Content $log -Raw}else{'(sin log)'};throw "EXE real no pasó aceptación: $txt"}[0m
+runlogs/0_release-windows.txt:2046:2026-09-02T09:46:10.6798008Z [36;1m  if($p.HasExited){throw 'EXE se cerró después de LOGIN_UI_READY'}[0m
+runlogs/0_release-windows.txt:2065:2026-09-02T09:48:50.8625979Z [31;1m[0m[36;1m[36;1m  19 | [0m … log -Raw}else{'(sin log)'};[36;1mthrow "EXE real no pasó aceptación: $txt"[0m}[0m
+runlogs/0_release-windows.txt:2067:2026-09-02T09:48:50.8631384Z [31;1m[0m[36;1m[36;1m[0m[36;1m[0m[36;1m[31;1m[31;1m[36;1m     | [31;1mEXE real no pasó aceptación: START 0.1.94 SETUP_OK 0.1.94 PAGE_LOAD Started http://tauri.localhost/[0m
+runlogs/0_release-windows.txt:2068:2026-09-02T09:48:50.8632706Z [31;1m[0m[36;1m[36;1m[0m[36;1m[0m[36;1m[31;1m[31;1m[36;1m[31;1m[36;1m     | [31;1mWEBVIEW_MILESTONE DOM_CONTENT_LOADED {"readyState":"interactive"}[0m
