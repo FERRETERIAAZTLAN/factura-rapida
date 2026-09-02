@@ -38,9 +38,18 @@ jobs:
       - name: Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Dependencias de smoke tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $PSNativeCommandUseErrorActionPreference=$true
+          npm install --no-save jsdom@26.1.0
+
       - name: Contrato hardware v0.1.94
         shell: pwsh
         run: |
+          $ErrorActionPreference='Stop'
+          $PSNativeCommandUseErrorActionPreference=$true
           node --check solrak-windows-native-v0194.js
           node --check scripts/apply-windows-hardware-v0194.mjs
           node --check scripts/apply-windows-web-v0194.mjs
@@ -49,6 +58,8 @@ jobs:
       - name: Compilar helper Winspool de Windows
         shell: pwsh
         run: |
+          $ErrorActionPreference='Stop'
+          $PSNativeCommandUseErrorActionPreference=$true
           node tests/extract-winspool-v0194.mjs desktop-native-v0194/hardware.rs.inc winspool-v0194.cs
           Add-Type -Path (Resolve-Path winspool-v0194.cs)
           if(-not ('SolrakRawPrinterV0194' -as [type])){throw 'El helper Winspool no compiló'}
@@ -58,12 +69,12 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
+          $PSNativeCommandUseErrorActionPreference=$true
           Remove-Item native-work -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip native-work -Force
           if(-not(Test-Path native-work/desktop/src-tauri/src/main.rs)){throw 'No se pudo extraer main.rs real'}
           if(-not(Test-Path native-work/desktop/src-tauri/Cargo.toml)){throw 'No se pudo extraer Cargo.toml real'}
           if(-not(Test-Path native-work/desktop/dist/index.html)){throw 'No se pudo extraer dist/index.html real'}
-          node scripts/prepare-windows-desktop.mjs native-work/desktop
           node scripts/apply-windows-hardware-v0194.mjs native-work/desktop
           node scripts/apply-windows-web-v0194.mjs native-work/desktop
           if(-not(Test-Path native-work/desktop/dist/solrak-windows-native-v0194.js)){throw 'Falta adaptador Windows en dist'}
@@ -72,6 +83,8 @@ jobs:
       - name: Validar integración web empaquetada
         shell: pwsh
         run: |
+          $ErrorActionPreference='Stop'
+          $PSNativeCommandUseErrorActionPreference=$true
           node --check native-work/desktop/dist/solrak-windows-native-v0194.js
           node --check native-work/desktop/dist/solrak-peripherals-v0191.js
           node --check native-work/desktop/dist/solrak-sumapro-tickets-v0169.js
@@ -86,6 +99,8 @@ jobs:
       - name: Cargo check Windows real
         shell: pwsh
         run: |
+          $ErrorActionPreference='Stop'
+          $PSNativeCommandUseErrorActionPreference=$true
           Push-Location native-work/desktop/src-tauri
           cargo generate-lockfile
           cargo check --locked
@@ -94,6 +109,8 @@ jobs:
       - name: Guardas de producción
         shell: pwsh
         run: |
+          $ErrorActionPreference='Stop'
+          $PSNativeCommandUseErrorActionPreference=$true
           $js=Get-Content solrak-windows-native-v0194.js -Raw
           $rs=Get-Content desktop-native-v0194/hardware.rs.inc -Raw
           if(($js+$rs) -match '(?i)cfdi|finkok'){throw 'Hardware invadió CFDI/Finkok'}
@@ -104,6 +121,8 @@ jobs:
       - name: Regresiones POS y UX
         shell: pwsh
         run: |
+          $ErrorActionPreference='Stop'
+          $PSNativeCommandUseErrorActionPreference=$true
           node tests/solrak-v0193-ui-states-focus-smoke.mjs
           node tests/solrak-ux-operational-audit-v0192.mjs
           node tests/solrak-ux-hardening-v0192-smoke.mjs
