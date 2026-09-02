@@ -1,0 +1,68 @@
+name: SOLRAK - Test Producto Comun v0.1.96
+
+on:
+  push:
+    branches: [fix/v0.1.96-producto-comun]
+    paths:
+      - 'solrak-common-product-v0196.js'
+      - 'scripts/apply-common-product-v0196.mjs'
+      - 'tests/solrak-common-product-v0196-smoke.mjs'
+      - '.github/workflows/test-common-product-v0196.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'solrak-common-product-v0196.js'
+      - 'scripts/apply-common-product-v0196.mjs'
+      - 'tests/solrak-common-product-v0196-smoke.mjs'
+      - '.github/workflows/test-common-product-v0196.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  common-product-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar JSDOM
+        run: npm install --no-save --no-audit --no-fund --package-lock=false jsdom@26.1.0
+      - name: Sintaxis
+        run: |
+          node --check solrak-common-product-v0196.js
+          node --check scripts/apply-common-product-v0196.mjs
+          node --check tests/solrak-common-product-v0196-smoke.mjs
+      - name: Smoke de Producto Comun
+        run: node tests/solrak-common-product-v0196-smoke.mjs
+      - name: Contrato de integracion Windows
+        run: |
+          rm -rf /tmp/solrak-v0196-desktop
+          mkdir -p /tmp/solrak-v0196-desktop/dist
+          printf '%s\n' '<!doctype html><html><body><script src="solrak-suma-sales-v0195.js"></script></body></html>' > /tmp/solrak-v0196-desktop/dist/index.html
+          node scripts/apply-common-product-v0196.mjs /tmp/solrak-v0196-desktop
+          test -f /tmp/solrak-v0196-desktop/dist/solrak-common-product-v0196.js
+          grep -q '<script src="solrak-common-product-v0196.js"></script>' /tmp/solrak-v0196-desktop/dist/index.html
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('/tmp/solrak-v0196-desktop/dist/index.html','utf8');
+          const sales=html.indexOf('solrak-suma-sales-v0195.js');
+          const common=html.indexOf('solrak-common-product-v0196.js');
+          if(sales<0||common<0||common<sales) throw new Error('Orden de scripts incorrecto');
+          console.log('SOLRAK_COMMON_PRODUCT_V0196_PACKAGE_OK');
+          NODE
+      - name: Regresion pantalla de ventas v0.1.95
+        run: node tests/solrak-suma-sales-v0195-smoke.mjs
+      - name: Alcance seguro
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const files=['solrak-common-product-v0196.js','scripts/apply-common-product-v0196.mjs'];
+          const s=files.map(f=>fs.readFileSync(f,'utf8')).join('\n');
+          if(/\bdemo\b|\bmock\b|simulad[oa]|finkok|cfdi|supabase/i.test(s)) throw new Error('Contenido fuera del alcance de Producto Comun v0.1.96');
+          for(const marker of ['fielCommonDialog','fielCommonName','Nombre del producto','height:auto!important']) if(!s.includes(marker)) throw new Error('Falta '+marker);
+          console.log('SOLRAK_COMMON_PRODUCT_V0196_SCOPE_OK');
+          NODE
