@@ -3,9 +3,9 @@
 
   const VERSION = "0.1.91";
   const byId = (id) => document.getElementById(id);
-  const pos = () => window.FacturaRapidaPOS || null;
   let scaleTimer = null;
   let lastWeight = null;
+  let printerLoad = null;
 
   function notice(message, error = false) {
     if (typeof window.notice === "function") window.notice(message, error);
@@ -20,8 +20,20 @@
     return true;
   }
 
+  function tauriBridge() {
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (typeof invoke !== "function") return null;
+    return {
+      native: "tauri",
+      printer: {
+        listPrinters: () => invoke("list_printers"),
+        printTicket: (job) => invoke("print_thermal_ticket", { job }),
+      },
+    };
+  }
+
   function bridge() {
-    const candidates = [window.SOLRAKDesktop, window.solrakDesktop, window.chrome?.webview?.hostObjects?.solrak];
+    const candidates = [tauriBridge(), window.SOLRAKDesktop, window.solrakDesktop, window.chrome?.webview?.hostObjects?.solrak];
     return candidates.find(Boolean) || null;
   }
 
@@ -29,7 +41,7 @@
     const b = bridge();
     return {
       desktop: !!b,
-      printer: !!(b?.printTicket || b?.printer?.printTicket || b?.printRaw),
+      printer: !!(b?.printer?.printTicket || b?.printTicket || b?.printRaw),
       scale: !!(b?.scale?.readWeight || b?.readWeight || b?.scale?.connect),
       ports: !!(b?.ports?.list || b?.listPorts),
     };
@@ -44,6 +56,49 @@
     const fn = owner?.[parts.at(-1)];
     if (typeof fn !== "function") throw new Error(`El instalador de Windows no expone ${path}.`);
     return await fn.apply(owner, args);
+  }
+
+  async function listPrinters() {
+    const b = bridge();
+    if (!b?.printer?.listPrinters && !b?.listPrinters) return [];
+    try {
+      const result = b?.printer?.listPrinters ? await invoke("printer.listPrinters") : await invoke("listPrinters");
+      return [...new Set((Array.isArray(result) ? result : []).map((name) => String(name || "").trim()).filter(Boolean))];
+    } catch (error) {
+      notice(error.message, true);
+      return [];
+    }
+  }
+
+  async function populatePrinterSelect(force = false) {
+    const select = byId("solrakTicketPrinter");
+    if (!select) return [];
+    if (!force && select.dataset.solrakNativePrinters === "1") return [];
+    if (!capabilities().printer) {
+      select.dataset.solrakNativePrinters = "0";
+      select.title = "El puente nativo de Windows no está disponible en esta instalación.";
+      return [];
+    }
+    if (printerLoad) return printerLoad;
+    printerLoad = (async () => {
+      const saved = window.SOLRAKSumaproTicketsV0169?.settings?.printerName || select.value || "system";
+      select.disabled = true;
+      const names = await listPrinters();
+      select.innerHTML = '<option value="system">Predeterminada de Windows</option>' + names.map((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        return option.outerHTML;
+      }).join("");
+      if ([...select.options].some((option) => option.value === saved)) select.value = saved;
+      else select.value = "system";
+      select.dataset.solrakNativePrinters = "1";
+      select.title = names.length ? `${names.length} impresora(s) instalada(s) detectada(s) por Windows.` : "Windows no devolvió impresoras instaladas; se usará la predeterminada si existe.";
+      const enabled = byId("solrakTicketPrinterEnabled")?.checked !== false;
+      select.disabled = !enabled;
+      return names;
+    })().finally(() => { printerLoad = null; });
+    return printerLoad;
   }
 
   async function listPorts() {
@@ -101,14 +156,19 @@
 
   async function printTicket(payload = {}) {
     const caps = capabilities();
-    if (!caps.printer) throw new Error("La impresora térmica requiere el puente nativo del instalador Windows.");
+    if (!caps.printer) throw new Error("La impresora térmica requiere el puente nativo de SOLRAK para Windows.");
     const exactFolio = String(payload.saleNumber ?? payload.folio ?? "").trim();
-    if (!exactFolio) throw new Error("No se puede imprimir un ticket sin folio exacto.");
+    if (!/^\d+$/.test(exactFolio)) throw new Error("El folio del ticket debe ser numérico y exacto.");
     const job = {
-      ...payload,
+      printerName: String(payload.printerName || "system").trim() || "system",
+      paperSize: String(payload.paperSize) === "80" ? "80" : "58",
+      copies: Math.min(2, Math.max(1, Number(payload.copies) || 1)),
+      text: String(payload.text || ""),
       saleNumber: exactFolio,
-      barcode: payload.barcode === false ? null : { type: "CODE128", value: exactFolio, humanReadable: true },
+      barcode: payload.barcode === false ? null : exactFolio,
+      cut: payload.cut !== false,
     };
+    if (!job.text.trim()) throw new Error("El ticket está vacío.");
     const b = bridge();
     if (b?.printer?.printTicket) return invoke("printer.printTicket", job);
     if (b?.printTicket) return invoke("printTicket", job);
@@ -144,10 +204,14 @@
 
   function mount() {
     installScannerContract();
+    if (byId("solrakTicketPrinter")) populatePrinterSelect().catch(() => {});
     if (capabilities().scale && !scaleTimer) startScalePolling();
   }
 
   new MutationObserver(mount).observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener("click", (event) => {
+    if (event.target?.closest?.('[data-tab="tickets"],#solrakTicketsTabBtn')) setTimeout(() => populatePrinterSelect().catch(() => {}), 30);
+  }, true);
   window.addEventListener("beforeunload", stopScalePolling);
   mount();
 
@@ -155,6 +219,8 @@
     version: VERSION,
     bridge,
     capabilities,
+    listPrinters,
+    populatePrinterSelect,
     listPorts,
     printTicket,
     readScaleOnce,
