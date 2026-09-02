@@ -72,7 +72,7 @@
 <div class="card-head"><div><h2>Hardware de Punto de Venta</h2><p class="muted small">Dispositivos reales conectados a Windows. No se generan lecturas simuladas.</p></div><span id="solrakHw91Status" class="solrakHw91Status">Comprobando Windows…</span></div>
 <div class="solrakHw91Grid">
   <section class="solrakHw91Panel"><h3>Báscula USB / COM</h3><div class="solrakHw91Fields"><label>Puerto<select id="solrakHw91Port"><option value="">Selecciona COM…</option></select></label><label>Baudios<select id="solrakHw91Baud"><option>9600</option><option>4800</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label><div class="solrakHw91Actions"><button id="solrakHw91RefreshPorts" type="button">Actualizar</button><button id="solrakHw91Connect" class="primary" type="button">Conectar</button><button id="solrakHw91Disconnect" type="button" disabled>Desconectar</button></div></div><label style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:9px"><input id="solrakHw91Auto" type="checkbox"> Conectar automáticamente al iniciar SOLRAK</label><div class="solrakHw91Live"><span>Peso recibido en tiempo real</span><strong id="solrakHw91Weight">Desconectada</strong></div><div class="solrakHw91Note">La báscula debe enviar el peso por puerto serial. SOLRAK admite cadenas ASCII comunes con kg, g o lb y conserva el texto bruto para diagnóstico.</div></section>
-  <section class="solrakHw91Panel"><h3>Impresora térmica / Windows</h3><div class="solrakHw91PrinterRow"><select id="solrakHw91Printer"><option value="">Detectando impresoras…</option></select><div class="solrakHw91Actions"><button id="solrakHw91RefreshPrinters" type="button">Actualizar</button></div></div><div id="solrakHw91PrinterMeta" class="solrakHw91PrinterMeta">SOLRAK utiliza el controlador de impresión de Windows. El código de barras del ticket contiene el folio exacto para búsqueda, reimpresión y devolución.</div><div class="solrakHw91Note">La impresora seleccionada queda registrada como preferida de SOLRAK. Al imprimir, Windows utiliza sus drivers instalados; no se envían bytes falsos a un puerto USB inexistente.</div></section>
+  <section class="solrakHw91Panel"><h3>Impresora térmica / Windows</h3><div class="solrakHw91PrinterRow"><select id="solrakHw91Printer"><option value="">Detectando impresoras…</option></select><div class="solrakHw91Actions"><button id="solrakHw91RefreshPrinters" type="button">Actualizar</button></div></div><div id="solrakHw91PrinterMeta" class="solrakHw91PrinterMeta">SOLRAK detecta las impresoras instaladas mediante Windows. El código de barras del ticket contiene el folio exacto para búsqueda, reimpresión y devolución.</div><div class="solrakHw91Note">La impresora elegida se guarda como preferencia visual. En v0.1.91 la impresión continúa mediante el controlador y diálogo de Windows, donde se confirma la impresora final; SOLRAK no afirma impresión silenciosa/directa hasta validar ese puente nativo.</div></section>
 </div>`;
     section.appendChild(card);
     bindUi();
@@ -168,10 +168,10 @@
     const option = select?.selectedOptions?.[0];
     const box = byId("solrakHw91PrinterMeta");
     if (!box) return;
-    if (!option?.value) { box.textContent = "Selecciona una impresora instalada en Windows."; return; }
+    if (!option?.value) { box.textContent = "Selecciona una impresora instalada en Windows."; window.SOLRAKPrinter = null; return; }
     storeSet(PRINTER_KEY, option.value);
-    box.innerHTML = `<strong>${option.value}</strong><br>Driver: ${option.dataset.driver || "Windows"}<br>Puerto: ${option.dataset.port || "Administrado por Windows"}${option.dataset.default === "1" ? " · Predeterminada" : ""}`;
-    window.SOLRAKPrinter = { name: option.value, driver: option.dataset.driver || "", port: option.dataset.port || "", windowsDriver: true };
+    box.innerHTML = `<strong>${option.value}</strong><br>Driver: ${option.dataset.driver || "Windows"}<br>Puerto: ${option.dataset.port || "Administrado por Windows"}${option.dataset.default === "1" ? " · Predeterminada" : ""}<br>Salida: diálogo/controlador de Windows`;
+    window.SOLRAKPrinter = { name: option.value, driver: option.dataset.driver || "", port: option.dataset.port || "", windowsDriver: true, directPrint: false };
   }
 
   function bindUi() {
