@@ -1,0 +1,51 @@
+name: SOLRAK v0.1.91 Hardware Windows safe
+on:
+  push:
+    branches: [feature/v0.1.91-native-hardware-foundation]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  validate-integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v0.1.91-native-hardware-foundation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --no-save jsdom@26.1.0
+      - name: Smoke hardware
+        run: node tests/solrak-hardware-v0191-smoke.mjs
+      - name: Regresiones POS
+        run: |
+          node tests/solrak-ux-core-v0190-smoke.mjs
+          node tests/solrak-shifts-v0189-smoke.mjs
+          node tests/solrak-inventory-mode-v0188-smoke.mjs
+          node tests/solrak-categorias-v0187-smoke.mjs
+          node tests/solrak-held-tickets-v0176-smoke.mjs
+          node tests/pos-module-smoke.mjs
+      - name: Integrar módulo
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html');s=p.read_text(encoding='utf-8');tag='<script src="solrak-hardware-v0191.js"></script>'
+          if tag not in s:
+            if '</body>' not in s: raise SystemExit('index sin body')
+            p.write_text(s.replace('</body>',tag+'\n</body>',1),encoding='utf-8')
+          PY
+      - name: Guardas
+        run: |
+          grep -q 'solrak-hardware-v0191.js' index.html
+          ! grep -Eqi 'cfdi-api|finkok|completeSale' solrak-hardware-v0191.js
+          ! grep -Eq '\b(alert|confirm|prompt)[[:space:]]*\(' solrak-hardware-v0191.js
+      - name: Persistir integración
+        run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'chore: integrar hardware v0.1.91'
+          git push origin HEAD:feature/v0.1.91-native-hardware-foundation
