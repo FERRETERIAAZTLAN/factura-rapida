@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/v0.1.85-caja-cortes-ui
+      - feature/v0.1.86-formularios-operativos
   workflow_dispatch:
 
 permissions:
@@ -17,7 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: feature/v0.1.85-caja-cortes-ui
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
       - name: Node
         uses: actions/setup-node@v4
@@ -25,10 +26,16 @@ jobs:
           node-version: '22'
       - name: Dependencia de pruebas
         run: npm install --no-save jsdom@26.1.0
-      - name: Smoke v0.1.85 Caja y cortes
-        run: node tests/solrak-caja-cortes-v0185-smoke.mjs
+      - name: Smoke de la rama
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "feature/v0.1.86-formularios-operativos" ]; then
+            node tests/solrak-formularios-v0186-smoke.mjs
+          else
+            node tests/solrak-caja-cortes-v0185-smoke.mjs
+          fi
       - name: Regresiones recientes
         run: |
+          node tests/solrak-caja-cortes-v0185-smoke.mjs
           node tests/solrak-ui-hardening-v0184-smoke.mjs
           node tests/solrak-ui-operativa-v0183-smoke.mjs
           node tests/solrak-credit-accounts-v0182-smoke.mjs
@@ -45,12 +52,20 @@ jobs:
           node tests/pos-module-smoke.mjs
       - name: Guardas de alcance
         run: |
-          ! grep -Eqi 'cfdi-api|finkok|completeSale' solrak-caja-cortes-v0185.js supabase/functions/cash-dashboard-api/index.ts
-          grep -q 'const VERSION="0.1.85"' solrak-caja-cortes-v0185.js
-          grep -q 'readOnly:true' supabase/functions/cash-dashboard-api/index.ts
-          grep -q 'opening+cashSales+entries-exits' supabase/functions/cash-dashboard-api/index.ts
-          grep -q 'solrak-ui-hardening-v0184.js' index.html
+          if [ "${GITHUB_REF_NAME}" = "feature/v0.1.86-formularios-operativos" ]; then
+            ! grep -Eqi 'cfdi-api|finkok|completeSale' solrak-formularios-v0186.js
+            grep -q 'const VERSION="0.1.86"' solrak-formularios-v0186.js
+            grep -q 'min_stock' solrak-formularios-v0186.js
+            grep -q 'max_stock' solrak-formularios-v0186.js
+            grep -q 'wholesale' solrak-formularios-v0186.js
+          else
+            ! grep -Eqi 'cfdi-api|finkok|completeSale' solrak-caja-cortes-v0185.js supabase/functions/cash-dashboard-api/index.ts
+            grep -q 'const VERSION="0.1.85"' solrak-caja-cortes-v0185.js
+            grep -q 'readOnly:true' supabase/functions/cash-dashboard-api/index.ts
+            grep -q 'opening+cashSales+entries-exits' supabase/functions/cash-dashboard-api/index.ts
+          fi
       - name: Integrar módulo v0.1.85 en index
+        if: github.ref_name == 'feature/v0.1.85-caja-cortes-ui'
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -62,7 +77,8 @@ jobs:
               p.write_text(s,encoding='utf-8')
           PY
           grep -q '<script src="solrak-caja-cortes-v0185.js"></script>' index.html
-      - name: Persistir integración en la rama
+      - name: Persistir integración v0.1.85
+        if: github.ref_name == 'feature/v0.1.85-caja-cortes-ui'
         run: |
           if git diff --quiet -- index.html; then echo 'Integración ya presente.'; exit 0; fi
           git config user.name 'github-actions[bot]'
