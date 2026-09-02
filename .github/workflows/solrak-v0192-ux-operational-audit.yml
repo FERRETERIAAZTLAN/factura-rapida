@@ -1,0 +1,36 @@
+name: SOLRAK v0.1.92 UX operational audit
+
+on:
+  push:
+    branches:
+      - feature/v0.1.92-ux-operational-audit
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  ux-audit-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save jsdom@26.1.0
+      - name: Auditoría UX operativa
+        run: node tests/solrak-ux-operational-audit-v0192.mjs
+      - name: Regresiones UX y POS
+        run: |
+          node tests/solrak-ux-core-v0190-smoke.mjs
+          node tests/solrak-peripherals-v0191-smoke.mjs
+          node tests/solrak-shifts-v0189-smoke.mjs
+          node tests/solrak-inventory-mode-v0188-smoke.mjs
+          node tests/solrak-categorias-v0187-smoke.mjs
+          node tests/solrak-caja-cortes-v0185-smoke.mjs
+          node tests/solrak-credit-accounts-v0182-smoke.mjs
+          node tests/solrak-held-tickets-v0176-smoke.mjs
+          node tests/pos-module-smoke.mjs
