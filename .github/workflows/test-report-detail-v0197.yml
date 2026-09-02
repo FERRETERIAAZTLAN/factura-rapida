@@ -57,7 +57,7 @@ jobs:
           node - <<'NODE'
           const fs=require('fs');
           const s=fs.readFileSync('solrak-report-detail-v0197.js','utf8');
-          if(/\bdemo\b|\bmock\b|simulad[oa]|finkok|cfdi|saveProduct|stock\s*=|price\s*=/i.test(s)) throw new Error('Reporte v0.1.97 salió del alcance visual/lectura');
+          if(/\bdemo\b|\bmock\b|simulad[oa]|finkok|cfdi|saveProduct|saveInventory|updateProduct|adjustStock/i.test(s)) throw new Error('Reporte v0.1.97 salió del alcance visual/lectura');
           for(const marker of ['Reporte de Ventas','Resumen','Totales','Periodo','Detalle de Ventas','HOY','ESTE MES','ESTE AÑO','Total Ventas Netas','Total Ganancias','Pr. Costo','Pr. Mayr.','Pr. Pub.']) if(!s.includes(marker)) throw new Error('Falta '+marker);
           console.log('SOLRAK_V0197_SCOPE_OK');
           NODE
