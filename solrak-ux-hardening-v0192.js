@@ -124,6 +124,16 @@ html[data-solrak-ux92="1"] #tab-pos .frRecentRow{border-radius:3px!important;pad
     document.addEventListener("close", (event) => {
       if (event.target?.tagName === "DIALOG") setTimeout(() => focusSearch(false), 0);
     }, true);
+    document.addEventListener("click", (event) => {
+      if (event.target?.closest?.("#posNewTicket,[data-ticket]")) setTimeout(() => focusSearch(false), 0);
+    }, true);
+    document.addEventListener("keydown", (event) => {
+      if (event.defaultPrevented || event.key !== "F9") return;
+      event.preventDefault();
+      const button = document.querySelector('[data-fiel-action="cash-cut"]');
+      if (button) button.click();
+      else if (typeof window.SOLRAKCajaCortesV0185?.openDashboard === "function") window.SOLRAKCajaCortesV0185.openDashboard();
+    }, true);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => { mount(); installFocusRecovery(); }, { once: true });
