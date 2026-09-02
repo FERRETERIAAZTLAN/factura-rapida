@@ -39,8 +39,12 @@ window.FacturaRapidaPOS = {
 
 window.eval(source);
 assert.equal(window.SOLRAKSalesV0174.version, "0.1.74");
-assert.deepEqual(window.SOLRAKSalesV0174.parseQuantityCode("3*ABC-123X"), { qty: 3, code: "ABC-123X" });
-assert.deepEqual(window.SOLRAKSalesV0174.parseQuantityCode("2,5 * 00077"), { qty: 2.5, code: "00077" });
+const parsedOne = window.SOLRAKSalesV0174.parseQuantityCode("3*ABC-123X");
+assert.equal(parsedOne.qty, 3);
+assert.equal(parsedOne.code, "ABC-123X");
+const parsedTwo = window.SOLRAKSalesV0174.parseQuantityCode("2,5 * 00077");
+assert.equal(parsedTwo.qty, 2.5);
+assert.equal(parsedTwo.code, "00077");
 assert.equal(window.SOLRAKSalesV0174.parseQuantityCode("ABC-123X"), null);
 
 window.SOLRAKSalesV0174.installQuantityCapture();
