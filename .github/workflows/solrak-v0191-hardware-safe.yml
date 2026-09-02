@@ -72,18 +72,8 @@ jobs:
           node tests/solrak-ui-operativa-v0183-smoke.mjs
           node tests/solrak-held-tickets-v0176-smoke.mjs
           node tests/pos-module-smoke.mjs
-      - name: Integrar módulo web v0.1.91 en index
+      - name: Integración web v0.1.91
         shell: pwsh
         run: |
           $p='index.html';$h=Get-Content $p -Raw;$tag='<script src="solrak-hardware-v0191.js"></script>'
-          if(-not $h.Contains($tag)){$h=$h.Replace('</body>',"$tag`r`n</body>");Set-Content $p $h -Encoding UTF8}
-          if(-not((Get-Content $p -Raw).Contains($tag))){throw 'No se integró hardware v0.1.91 en index'}
-      - name: Persistir integración web
-        shell: pwsh
-        run: |
-          if(git diff --quiet -- index.html){Write-Host 'Integración web ya presente.';exit 0}
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html
-          git commit -m 'chore: integrar hardware v0.1.91 en index'
-          git push origin HEAD:feature/v0.1.91-windows-hardware-bridge
+          if(-not $h.Contains($tag)){throw 'index.html no contiene hardware v0.1.91'}
