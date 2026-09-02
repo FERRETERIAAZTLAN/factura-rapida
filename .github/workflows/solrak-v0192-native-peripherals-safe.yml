@@ -57,9 +57,9 @@ jobs:
             index.write_text(h,encoding='utf-8')
 
           rebase=Path('scripts/rebase-fix1-native-v0142.mjs');r=rebase.read_text(encoding='utf-8')
-          old="""       if(!confirm('Se instalará Factura Rápida v'+available.version+'. ¿Continuar?'))return;\n       check.disabled=true;"""
-          new="""       if(check.dataset.installVersion!==String(available.version||'')){\n         check.dataset.installVersion=String(available.version||'');\n         check.textContent='Confirmar v'+available.version;\n         if(status)status.textContent='Haz clic nuevamente para instalar v'+available.version;\n         return;\n       }\n       delete check.dataset.installVersion;\n       check.disabled=true;"""
-          if old in r: r=r.replace(old,new,1)
+          needle="if(!confirm('Se instalará Factura Rápida v'+available.version+'. ¿Continuar?'))return;"
+          replacement="if(check.dataset.installVersion!==String(available.version||'')){check.dataset.installVersion=String(available.version||'');check.textContent='Confirmar v'+available.version;if(status)status.textContent='Haz clic nuevamente para instalar v'+available.version;return;}delete check.dataset.installVersion;"
+          if needle in r: r=r.replace(needle,replacement,1)
           if 'confirm(' in r: raise SystemExit('El actualizador nativo todavía contiene confirm()')
           rebase.write_text(r,encoding='utf-8')
           '@ | python -
