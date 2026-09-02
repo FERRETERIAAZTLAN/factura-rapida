@@ -2,7 +2,14 @@ name: SOLRAK - Test pantalla ventas v0.1.95
 
 on:
   push:
-    branches: [feature/v0.1.95-suma-sales-screen]
+    branches: [feature/v0.1.95-suma-sales-clean]
+    paths:
+      - 'solrak-suma-sales-v0195.js'
+      - 'tests/solrak-suma-sales-v0195-smoke.mjs'
+      - 'scripts/apply-hardware-v0194.mjs'
+      - '.github/workflows/test-suma-sales-v0195.yml'
+  pull_request:
+    branches: [main]
     paths:
       - 'solrak-suma-sales-v0195.js'
       - 'tests/solrak-suma-sales-v0195-smoke.mjs'
