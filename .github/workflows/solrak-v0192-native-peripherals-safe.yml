@@ -1,0 +1,118 @@
+name: SOLRAK v0.1.92 Periféricos nativos Windows safe
+
+on:
+  push:
+    branches:
+      - feature/v0.1.92-native-peripherals-windows
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-native-peripherals:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v0.1.92-native-peripherals-windows
+          fetch-depth: 0
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Dependencia de pruebas
+        shell: pwsh
+        run: npm install --no-save --no-audit --no-fund jsdom@26.1.0
+      - name: Alinear ticket, puente y actualizador
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+
+          ticket=Path('solrak-sumapro-tickets-v0169.js')
+          s=ticket.read_text(encoding='utf-8')
+          old='''    const number = String(receipt?.saleNumber || 0).padStart(6, "0");\n    const barcodeValue = number;'''
+          new='''    const rawNumber = String(receipt?.saleNumber ?? receipt?.folio ?? "0").trim();\n    const number = (rawNumber || "0").padStart(6, "0");\n    const barcodeValue = rawNumber || number;'''
+          if old in s: s=s.replace(old,new,1)
+          elif 'const rawNumber = String(receipt?.saleNumber' not in s: raise SystemExit('No se encontró folio legacy esperado')
+          old='''    if (!receipt) return false;\n    if (!options.force && !currentSettings.printerEnabled) return false;\n    const html = printDocument(receipt, currentSettings);'''
+          new='''    if (!receipt) return false;\n    if (!options.force && !currentSettings.printerEnabled) return false;\n    if (window.SOLRAKNativePeripheralsV0192?.tryPrintReceipt?.(receipt, currentSettings, options)) return true;\n    const html = printDocument(receipt, currentSettings);'''
+          if old in s: s=s.replace(old,new,1)
+          elif 'SOLRAKNativePeripheralsV0192?.tryPrintReceipt' not in s: raise SystemExit('No se encontró printReceipt esperado')
+          s=s.replace('showTicketMessage("Ticket de prueba enviado a la impresión de Windows.");','showTicketMessage("Procesando ticket de prueba…");')
+          s=s.replace('showTicketMessage("Último ticket enviado nuevamente a impresión.");','showTicketMessage("Procesando reimpresión…");')
+          ticket.write_text(s,encoding='utf-8')
+
+          index=Path('index.html');h=index.read_text(encoding='utf-8')
+          tag='<script src="solrak-native-peripherals-v0192.js"></script>'
+          anchor='<script src="solrak-peripherals-v0191.js"></script>'
+          if tag not in h:
+            if anchor not in h: raise SystemExit('No está el contrato v0.1.91 en index')
+            h=h.replace(anchor,tag+'\n'+anchor,1)
+            index.write_text(h,encoding='utf-8')
+
+          rebase=Path('scripts/rebase-fix1-native-v0142.mjs');r=rebase.read_text(encoding='utf-8')
+          old="""       if(!confirm('Se instalará Factura Rápida v'+available.version+'. ¿Continuar?'))return;\n       check.disabled=true;"""
+          new="""       if(check.dataset.installVersion!==String(available.version||'')){\n         check.dataset.installVersion=String(available.version||'');\n         check.textContent='Confirmar v'+available.version;\n         if(status)status.textContent='Haz clic nuevamente para instalar v'+available.version;\n         return;\n       }\n       delete check.dataset.installVersion;\n       check.disabled=true;"""
+          if old in r: r=r.replace(old,new,1)
+          if 'confirm(' in r: raise SystemExit('El actualizador nativo todavía contiene confirm()')
+          rebase.write_text(r,encoding='utf-8')
+          '@ | python -
+      - name: Smoke JS y guardas nativas
+        shell: pwsh
+        run: |
+          node --check solrak-native-peripherals-v0192.js
+          node tests/solrak-native-peripherals-v0192-smoke.mjs
+          if((Get-Content scripts/rebase-fix1-native-v0142.mjs -Raw) -match '\b(alert|confirm|prompt)\s*\('){throw 'El actualizador conserva diálogo browser'}
+          if(-not (Get-Content solrak-sumapro-tickets-v0169.js -Raw).Contains('const barcodeValue = rawNumber || number;')){throw 'Código de barras no usa folio exacto'}
+      - name: Reconstruir base real del EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Remove-Item native-work -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive Factura_Rapida_Desktop_Windows_FIX1.zip native-work -Force
+          node scripts/rebase-fix1-native-v0142.mjs native-work/desktop
+          node scripts/apply-native-peripherals-v0192.mjs native-work/desktop
+          if(-not(Test-Path native-work/desktop/dist/solrak-native-peripherals-v0192.js)){throw 'No se integró el puente JS nativo'}
+          if((Get-Content native-work/desktop/scripts/sync-web.mjs -Raw) -match '\bconfirm\s*\('){throw 'sync-web reconstruido conserva confirm()'}
+      - name: Cargo check Windows real
+        shell: pwsh
+        run: |
+          Push-Location native-work/desktop/src-tauri
+          cargo generate-lockfile
+          cargo check --locked
+          Pop-Location
+      - name: Guardas de impresión real
+        shell: pwsh
+        run: |
+          $rs=Get-Content desktop-native-v0192/main.rs -Raw
+          foreach($m in @('print_thermal_ticket','raw_spool','WritePrinter','list_windows_printers','scale_connect','scale_read')){if(-not $rs.Contains($m)){throw "Falta $m"}}
+          if(-not $rs.Contains('pDatatype="RAW"')){throw 'No usa datatype RAW'}
+          if(-not $rs.Contains('0x1d,0x6b,0x49')){throw 'No genera CODE128 ESC/POS'}
+          if($rs -match '(?i)cfdi|finkok'){throw 'Periféricos invadieron CFDI/Finkok'}
+      - name: Regresiones POS recientes
+        shell: pwsh
+        run: |
+          node tests/solrak-peripherals-v0191-smoke.mjs
+          node tests/solrak-ux-core-v0190-smoke.mjs
+          node tests/solrak-shifts-v0189-smoke.mjs
+          node tests/solrak-inventory-mode-v0188-smoke.mjs
+          node tests/solrak-categorias-v0187-smoke.mjs
+          node tests/solrak-caja-cortes-v0185-smoke.mjs
+          node tests/solrak-held-tickets-v0176-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+          node tests/pos-module-smoke.mjs
+      - name: Persistir integración v0.1.92
+        shell: pwsh
+        run: |
+          if(git diff --quiet -- index.html solrak-sumapro-tickets-v0169.js scripts/rebase-fix1-native-v0142.mjs){Write-Host 'Integración ya persistida.'; exit 0}
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html solrak-sumapro-tickets-v0169.js scripts/rebase-fix1-native-v0142.mjs
+          git commit -m 'chore: integrar periféricos nativos v0.1.92'
+          git push origin HEAD:feature/v0.1.92-native-peripherals-windows
