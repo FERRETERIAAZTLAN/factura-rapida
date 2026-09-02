@@ -88,7 +88,7 @@ jobs:
           if($clearFooter -match '(?i)fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|finkok|supabase'){throw 'Pie despejado v0.1.67 invadió lógica productiva'}
           foreach($m in @('--solrak-simple-side:210px','#frBrandPill{display:none!important','grid-template-columns:minmax(0,1fr) 270px','solrakSimpleAdvancedToggle','SOLRAKSimpleUIV0168')){if(-not $simpleUI.Contains($m)){throw "Interfaz simple v0.1.68 incompleta: $m"}}
           if($simpleUI -match '(?i)fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|finkok|supabase'){throw 'Interfaz simple v0.1.68 invadió lógica productiva'}
-          foreach($m in @('--solrak-simple-side:238px','grid-template-columns:minmax(0,1fr) 292px','Predeterminada de Windows','Imprimir ticket de prueba','SOLRAKSumaproTicketsV0170')){if(-not $sumaproTickets.Contains($m)){throw "Navegación/tickets v0.1.70 incompleta: $m"}}
+          foreach($m in @('--solrak-simple-side:238px','grid-template-columns:minmax(0,1fr) 292px','Predeterminada de Windows','Imprimir ticket de prueba','SOLRAKSumaproTicketsV0169')){if(-not $sumaproTickets.Contains($m)){throw "Navegación/tickets v0.1.70 incompleta: $m"}}
           if(-not $pm.Contains('solrak:pos-sale-complete')){throw 'El POS no entrega el comprobante confirmado a impresión'}
           if($sumaproTickets -match '(?i)fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|supabase'){throw 'Navegación/tickets v0.1.70 invadió lógica productiva'}
           foreach($m in @('--solrak-simple-accent:#e97618!important','--solrak-pos-blue:#e97618!important','Facturación','position:sticky!important','resetNavigationScroll','SOLRAKRedesignV0170')){if(-not $redesign.Contains($m)){throw "Rediseño v0.1.70 incompleto: $m"}}
@@ -254,7 +254,7 @@ jobs:
           if($clearFooter -match '(?i)fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|finkok|supabase'){throw 'Pie despejado empaquetado invadió lógica productiva'}
           foreach($m in @('--solrak-simple-side:210px','#frBrandPill{display:none!important','grid-template-columns:minmax(0,1fr) 270px','solrakSimpleAdvancedToggle','SOLRAKSimpleUIV0168')){if(-not $simpleUI.Contains($m)){throw "Interfaz simple empaquetada incompleta: $m"}}
           if($simpleUI -match '(?i)fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|finkok|supabase'){throw 'Interfaz simple empaquetada invadió lógica productiva'}
-          foreach($m in @('--solrak-simple-side:238px','grid-template-columns:minmax(0,1fr) 292px','Predeterminada de Windows','Imprimir ticket de prueba','SOLRAKSumaproTicketsV0170')){if(-not $sumaproTickets.Contains($m)){throw "Navegación/tickets empaquetada incompleta: $m"}}
+          foreach($m in @('--solrak-simple-side:238px','grid-template-columns:minmax(0,1fr) 292px','Predeterminada de Windows','Imprimir ticket de prueba','SOLRAKSumaproTicketsV0169')){if(-not $sumaproTickets.Contains($m)){throw "Navegación/tickets empaquetada incompleta: $m"}}
           if(-not $pm.Contains('solrak:pos-sale-complete')){throw 'POS empaquetado sin comprobante confirmado para impresión'}
           if($sumaproTickets -match '(?i)fetch\s*\(|XMLHttpRequest|completeSale|cfdi-api|supabase'){throw 'Navegación/tickets empaquetada invadió lógica productiva'}
           foreach($m in @('--solrak-simple-accent:#e97618!important','--solrak-pos-blue:#e97618!important','Facturación','position:sticky!important','resetNavigationScroll','SOLRAKRedesignV0170')){if(-not $redesign.Contains($m)){throw "Rediseño empaquetado incompleto: $m"}}
