@@ -1,94 +1,15 @@
-name: SOLRAK v0.1.94 Windows hardware native
+name: SOLRAK v0.1.94 Windows hardware native (superseded)
+
+# La validación autoritativa de v0.1.94 es:
+# .github/workflows/solrak-v0194-hardware-native-safe.yml
+# Este archivo queda sin ejecución automática para conservar trazabilidad de runs históricos.
 
 on:
-  push:
-    branches:
-      - feature/v0.1.94-windows-hardware-native
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'solrak-hardware-v0194.js'
-      - 'desktop-native-v0194/**'
-      - 'scripts/apply-hardware-v0194.mjs'
-      - 'tests/solrak-hardware-v0194-smoke.mjs'
-      - '.github/workflows/solrak-v0194-windows-hardware-native.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
-  windows-hardware-native:
+  superseded:
+    if: ${{ false }}
     runs-on: windows-latest
-    timeout-minutes: 35
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Dependencias de prueba
-        shell: pwsh
-        run: npm install --no-save --no-audit --no-fund jsdom@26.1.0
-      - name: Sintaxis y smoke hardware v0.1.94
-        shell: pwsh
-        run: |
-          node --check solrak-hardware-v0194.js
-          node --check scripts/apply-hardware-v0194.mjs
-          node tests/solrak-hardware-v0194-smoke.mjs
-      - name: Compilar helper WinSpool real
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          Add-Type -Path desktop-native-v0194/solrak_raw_print_helper_v0194.cs
-          if(-not ('SolrakRawPrinter' -as [type])){throw 'No compiló SolrakRawPrinter'}
-          'WIN_SPOOL_HELPER_COMPILE_OK'
-      - name: Reconstruir paquete Windows con web actual
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          Remove-Item native-work -Recurse -Force -ErrorAction SilentlyContinue
-          Expand-Archive Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip native-work -Force
-          if(-not(Test-Path native-work/desktop/src-tauri/src/main.rs)){throw 'No se pudo extraer main.rs'}
-          if(-not(Test-Path native-work/desktop/dist)){throw 'No se pudo extraer dist'}
-          Copy-Item index.html native-work/desktop/dist/index.html -Force
-          Get-ChildItem -Path . -File -Filter '*.js' | ForEach-Object { Copy-Item $_.FullName (Join-Path 'native-work/desktop/dist' $_.Name) -Force }
-          node scripts/apply-hardware-v0194.mjs native-work/desktop
-          node scripts/apply-hardware-v0194.mjs native-work/desktop
-          if(-not(Test-Path native-work/desktop/dist/solrak-hardware-v0194.js)){throw 'No se integró hardware JS'}
-          if(-not(Test-Path native-work/desktop/src-tauri/src/solrak_hardware_v0194.rs)){throw 'No se integró hardware Rust'}
-      - name: Cargo test y check Windows
-        shell: pwsh
-        run: |
-          Push-Location native-work/desktop/src-tauri
-          cargo generate-lockfile
-          cargo test --locked
-          cargo check --locked
-          Pop-Location
-      - name: Contrato de integración nativa
-        shell: pwsh
-        run: |
-          $main=Get-Content native-work/desktop/src-tauri/src/main.rs -Raw
-          $module=Get-Content native-work/desktop/src-tauri/src/solrak_hardware_v0194.rs -Raw
-          $tickets=Get-Content native-work/desktop/dist/solrak-sumapro-tickets-v0169.js -Raw
-          $index=Get-Content native-work/desktop/dist/index.html -Raw
-          foreach($m in @('hardware_status_v0194','list_serial_ports_v0194','scale_connect_v0194','scale_read_v0194','scale_disconnect_v0194','list_windows_printers_v0194','print_raw_ticket_v0194')){if(-not $main.Contains($m)){throw "main.rs no registra $m"}}
-          foreach($m in @('serialport::available_ports()','powershell.exe','RAW_PRINT_HELPER')){if(-not $module.Contains($m)){throw "bridge Rust no contiene $m"}}
-          if(-not $tickets.Contains('nativeHardware?.directPrintEnabled?.()')){throw 'Tickets no usan impresión directa v0.1.94'}
-          if(-not $index.Contains('solrak-hardware-v0194.js')){throw 'index Windows no carga hardware v0.1.94'}
-          if(($module + (Get-Content solrak-hardware-v0194.js -Raw)) -match '(?i)cfdi|finkok|\bdemo\b|\bmock\b|simulad[oa]'){throw 'Hardware v0.1.94 invadió alcance o contiene simulación'}
-      - name: Regresiones POS y UX
-        shell: pwsh
-        run: |
-          node tests/solrak-v0193-ui-states-focus-smoke.mjs
-          node tests/solrak-ux-operational-audit-v0192.mjs
-          node tests/solrak-ux-hardening-v0192-smoke.mjs
-          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
-          node tests/solrak-shifts-v0189-smoke.mjs
-          node tests/solrak-caja-cortes-v0185-smoke.mjs
-          node tests/solrak-held-tickets-v0176-smoke.mjs
-          node tests/pos-module-smoke.mjs
+      - run: echo "Superseded by solrak-v0194-hardware-native-safe.yml"
