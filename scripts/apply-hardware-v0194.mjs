@@ -59,21 +59,31 @@ await writeFile(indexPath, index, 'utf8');
 
 let tickets = await readFile(ticketsPath, 'utf8');
 const directMarker = 'nativeHardware?.directPrintEnabled?.()';
+const browserHelperMarker = 'function solrakPrintBrowserV0194(html)';
 if (!tickets.includes(directMarker)) {
-  const frameNeedle = '    const frame = document.createElement("iframe");';
-  if (!tickets.includes(frameNeedle)) throw new Error('tickets v0.1.69: no se encontró inicio de impresión por iframe');
-  const patch = `    const nativeHardware = window.SOLRAKHardwareV0194;\n    if (nativeHardware?.directPrintEnabled?.()) {\n      nativeHardware.printReceipt(receipt, currentSettings).catch((error) => {\n        if (typeof window.notice === "function") window.notice(error?.message || "No se pudo imprimir el ticket en la impresora térmica.", true);\n      });\n      return true;\n    }\n${frameNeedle}`;
-  tickets = tickets.replace(frameNeedle, patch);
+  const printStart = tickets.indexOf('  function printReceipt(receipt, options = {}) {');
+  const frameStart = tickets.indexOf('    const frame = document.createElement("iframe");', printStart);
+  const nextFunction = tickets.indexOf('\n\n  function readTicketForm()', frameStart);
+  if (printStart < 0 || frameStart < 0 || nextFunction < 0) throw new Error('tickets v0.1.69: no se encontró el bloque de impresión esperado');
+
+  const browserHelper = `  function solrakPrintBrowserV0194(html) {\n    const frame = document.createElement("iframe");\n    frame.title = "Impresión de ticket";\n    frame.style.cssText =\n      "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none";\n    frame.onload = () => {\n      setTimeout(() => {\n        try {\n          frame.contentWindow?.focus();\n          frame.contentWindow?.print();\n        } catch {\n          if (typeof window.notice === "function")\n            window.notice("Windows no pudo abrir la impresión del ticket.", true);\n        }\n      }, 120);\n      setTimeout(() => frame.remove(), 60000);\n    };\n    document.body.appendChild(frame);\n    frame.srcdoc = html;\n    return true;\n  }\n\n`;
+  tickets = tickets.slice(0, printStart) + browserHelper + tickets.slice(printStart);
+
+  const shiftedPrintStart = tickets.indexOf('  function printReceipt(receipt, options = {}) {');
+  const shiftedFrameStart = tickets.indexOf('    const frame = document.createElement("iframe");', shiftedPrintStart);
+  const shiftedNextFunction = tickets.indexOf('\n\n  function readTicketForm()', shiftedFrameStart);
+  const fallbackBlock = `    const nativeHardware = window.SOLRAKHardwareV0194;\n    if (nativeHardware?.directPrintEnabled?.()) {\n      nativeHardware.printReceipt(receipt, currentSettings).catch((error) => {\n        if (typeof window.notice === "function")\n          window.notice(\`Impresión directa no disponible: \${error?.message || error}. Se abrirá la impresión de Windows.\`, true);\n        solrakPrintBrowserV0194(html);\n      });\n      return true;\n    }\n    return solrakPrintBrowserV0194(html);\n  }`;
+  tickets = tickets.slice(0, shiftedFrameStart) + fallbackBlock + tickets.slice(shiftedNextFunction);
 }
 await writeFile(ticketsPath, tickets, 'utf8');
 
 for (const [file, markers] of [
   [mainPath, ['HardwareStateV0194', 'print_raw_ticket_v0194', 'scale_read_v0194']],
   [indexPath, ['solrak-hardware-v0194.js']],
-  [ticketsPath, [directMarker]],
+  [ticketsPath, [directMarker, browserHelperMarker, 'Se abrirá la impresión de Windows.']],
 ]) {
   const text = await readFile(file, 'utf8');
   for (const marker of markers) if (!text.includes(marker)) throw new Error(`${file}: falta ${marker}`);
 }
 
-console.log('APPLY HARDWARE v0.1.94 OK: RAW/ESC-POS, spooler Windows, báscula COM y escáner teclado integrados en paquete nativo.');
+console.log('APPLY HARDWARE v0.1.94 OK: RAW/ESC-POS, fallback Windows, spooler, báscula COM y escáner teclado integrados en paquete nativo.');
