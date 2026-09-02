@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {JSDOM} from 'jsdom';
+const ui=fs.readFileSync('solrak-hardware-v0191.js','utf8');
+assert.match(ui,/const VERSION="0\.1\.91"/);
+assert.match(ui,/solrak_hardware_info/);
+assert.match(ui,/solrak_print_ticket/);
+assert.match(ui,/solrak_scale_connect/);
+assert.match(ui,/solrak_scale_read/);
+assert.match(ui,/solrak:scale-weight/);
+assert.doesNotMatch(ui,/\balert\s*\(|\bconfirm\s*\(/);
+assert.doesNotMatch(ui,/cfdi|finkok/i);
+const dom=new JSDOM('<!doctype html><html><body><section id="tab-configuracion"></section></body></html>',{runScripts:'outside-only'});
+const {window}=dom;window.eval(ui);await new Promise(r=>setTimeout(r,30));
+assert.equal(window.SOLRAKHardwareV0191.version,'0.1.91');
+assert.ok(window.document.querySelector('#solrakHardware91'));
+assert.match(window.document.querySelector('#solrakHardware91State').textContent,/Windows/);
+console.log('SOLRAK v0.1.91 hardware smoke: OK');
