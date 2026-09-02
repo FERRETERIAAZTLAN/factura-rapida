@@ -1,0 +1,113 @@
+name: SOLRAK v0.1.94 Windows printer native safe
+
+on:
+  push:
+    branches:
+      - feature/v0.1.94-windows-printer-native
+  pull_request:
+    paths:
+      - 'solrak-sumapro-tickets-v0169.js'
+      - 'solrak-peripherals-v0191.js'
+      - 'native/windows-printer-v0194.rs'
+      - 'scripts/apply-windows-printer-v0194.mjs'
+      - 'tests/solrak-windows-printer-v0194-smoke.mjs'
+      - '.github/workflows/solrak-v0194-windows-printer-native-safe.yml'
+
+permissions:
+  contents: write
+
+env:
+  FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
+
+jobs:
+  windows-native:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Dependencias de prueba
+        shell: pwsh
+        run: npm install --no-save --no-audit --no-fund jsdom@25
+
+      - name: Aplicar impresión nativa al código web de trabajo
+        shell: pwsh
+        run: node scripts/apply-windows-printer-v0194.mjs web
+
+      - name: Sintaxis y contrato de impresora
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node --check solrak-peripherals-v0191.js
+          node --check solrak-sumapro-tickets-v0169.js
+          node --check scripts/apply-windows-printer-v0194.mjs
+          node tests/solrak-windows-printer-v0194-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+          node tests/solrak-peripherals-v0191-smoke.mjs
+
+      - name: Reconstruir Tauri real desde FIX1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          cmd /c "git show $env:FR_FIX1_COMMIT`:Factura_Rapida_Desktop_Windows_FIX1.zip > FIX1.zip"
+          if($LASTEXITCODE -ne 0){throw 'No se pudo recuperar FIX1'}
+          $sha=(Get-FileHash FIX1.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne '144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134'){throw "FIX1 hash inesperado $sha"}
+          Expand-Archive FIX1.zip . -Force
+          node scripts/rebase-fix1-native-v0142.mjs desktop
+          node scripts/apply-windows-printer-v0194.mjs desktop desktop
+          if(-not(Test-Path 'desktop/src-tauri/src/windows_printer_v0194.rs')){throw 'No se integró módulo nativo v0.1.94'}
+          $main=Get-Content 'desktop/src-tauri/src/main.rs' -Raw
+          foreach($marker in @('mod windows_printer_v0194','list_printers','print_thermal_ticket')){if(-not $main.Contains($marker)){throw "Tauri no registró $marker"}}
+
+      - name: Compilar puente Winspool en Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Push-Location desktop/src-tauri
+          cargo check
+          if($LASTEXITCODE -ne 0){throw 'cargo check falló para la impresión térmica nativa'}
+          Pop-Location
+
+      - name: Regresiones POS sin venta real
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          node tests/solrak-ux-operational-audit-v0192.mjs
+          node tests/solrak-v0193-ui-states-focus-smoke.mjs
+          node tests/solrak-flow-v0173-smoke.mjs
+          node tests/solrak-held-tickets-v0176-smoke.mjs
+          node tests/pos-module-smoke.mjs
+
+      - name: Guardas de alcance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $ticket=Get-Content solrak-sumapro-tickets-v0169.js -Raw
+          if($ticket -match 'frame\.contentWindow\?\.print\(\)|contentWindow\.print\(\)'){throw 'Reapareció impresión web'}
+          foreach($f in @('solrak-sumapro-tickets-v0169.js','solrak-peripherals-v0191.js','native/windows-printer-v0194.rs','scripts/apply-windows-printer-v0194.mjs')){
+            $text=Get-Content $f -Raw
+            if($text -match 'cfdi-api|finkok'){throw "v0.1.94 invadió CFDI/Finkok en $f"}
+          }
+          Write-Host 'SOLRAK_V0194_SCOPE_OK noRealSale=true noCfdi=true noBrowserPrint=true'
+
+      - name: Persistir web validado en la rama
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          git config user.name 'SOLRAK CI'
+          git config user.email 'actions@users.noreply.github.com'
+          git add solrak-sumapro-tickets-v0169.js
+          git diff --cached --quiet
+          if($LASTEXITCODE -eq 0){Write-Host 'El parche web ya estaba persistido'; exit 0}
+          git commit -m 'feat: activar impresión térmica nativa v0.1.94'
+          git push origin HEAD:$env:GITHUB_REF_NAME
