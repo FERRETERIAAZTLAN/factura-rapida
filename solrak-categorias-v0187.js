@@ -1,0 +1,98 @@
+(() => {
+  "use strict";
+
+  const VERSION="0.1.87";
+  const API_URL="https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/catalog-integrity-api";
+  const byId=(id)=>document.getElementById(id);
+  const esc=(v)=>String(v??"").replace(/[&<>\"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+  const state={categories:[],loaded:false};
+
+  function currentSession(){try{return session||window.session||null}catch{return window.session||null}}
+  function anonKey(){try{return ANON_KEY||window.ANON_KEY||""}catch{return window.ANON_KEY||""}}
+  function isAdmin(){return currentSession()?.user?.role==="admin"}
+  function productsNow(){try{return Array.isArray(products)?products:(window.products||[])}catch{return window.products||[]}}
+  function notify(message,error=false){try{if(typeof notice==="function")return notice(message,error)}catch{};if(error)window.alert?.(message)}
+
+  async function api(action,payload={}){
+    const key=anonKey(),token=currentSession()?.token||"";
+    const headers={Authorization:`Bearer ${key}`,apikey:key,"Content-Type":"application/json"};
+    if(token)headers["x-session-token"]=token;
+    const response=await fetch(API_URL,{method:"POST",headers,body:JSON.stringify({action,...payload})});
+    let data={};try{data=await response.json()}catch{}
+    if(!response.ok)throw new Error(data.error||data.detail||"No se pudo consultar categorías");
+    return data;
+  }
+
+  function ensureStyle(){
+    if(byId("solrakCategories87Style"))return;
+    const style=document.createElement("style");style.id="solrakCategories87Style";
+    style.textContent=`
+.solrak87Categories{margin-top:14px}.solrak87CategoryForm{display:grid;grid-template-columns:120px minmax(220px,1fr) auto;gap:7px;align-items:end;margin-bottom:8px}.solrak87CategoryForm .reserved{height:35px;display:flex;align-items:center;padding:0 9px;border:1px solid #d8dfe4;background:#f5f7f9;border-radius:4px;font-size:11px;font-weight:850}.solrak87CategoryTable{width:100%;border-collapse:collapse;font-size:11px}.solrak87CategoryTable th,.solrak87CategoryTable td{padding:7px 8px;border-bottom:1px solid #edf0f2}.solrak87CategoryTable th{font-size:9px;text-transform:uppercase}.solrak87CategoryId{font-size:16px;font-weight:900;font-variant-numeric:tabular-nums}.solrak87Reserved{display:inline-block;margin-left:6px;padding:2px 5px;border-radius:3px;background:#eef5ff;color:#285d9b;font-size:8px;font-weight:900}.solrak87CategoryState{font-size:9px;font-weight:900}.solrak87CategoryState.off{color:#9a4242}.solrak87CategoryState.on{color:#247044}#pCategory option:disabled{color:#999}.solrak87Integrity{padding:8px 10px;border:1px solid #d7e0e8;background:#f7fafc;border-radius:5px;font-size:10px;color:#60707d;margin-top:7px}@media(max-width:760px){.solrak87CategoryForm{grid-template-columns:1fr}.solrak87CategoryForm .reserved{display:none}}
+`;
+    document.head.appendChild(style);
+  }
+
+  function productCount(category){return productsNow().filter(p=>Number(p.category_id)===Number(category.id)&&p.active!==false).length}
+
+  function syncCategorySelect(){
+    const old=byId("pCategory");if(!old||!state.loaded)return;
+    const selected=old.value||"Producto en General";
+    let select=old;
+    if(old.tagName!=="SELECT"){
+      select=document.createElement("select");select.id="pCategory";select.className=old.className||"field";select.required=true;old.replaceWith(select);
+    }
+    const categories=state.categories;
+    select.innerHTML=categories.map(c=>`<option value="${esc(c.name)}" ${c.active===false?'disabled':''}>#${c.id} · ${esc(c.name)}${c.active===false?' · Inactiva':''}</option>`).join("");
+    const match=categories.find(c=>c.name===selected)||categories.find(c=>c.name==="Producto en General")||categories.find(c=>c.id===1)||categories[0];
+    if(match){
+      const options=[...select.options];
+      const existing=options.find(option=>option.value===match.name);
+      if(existing&&match.active===false)existing.disabled=false;
+      select.value=match.name;
+    }
+  }
+
+  function renderManager(){
+    if(!isAdmin()||!state.loaded)return;
+    const tab=byId("tab-inventario");if(!tab)return;
+    let card=byId("solrakCategoryManager");
+    if(!card){card=document.createElement("article");card.id="solrakCategoryManager";card.className="card solrak87Categories";tab.appendChild(card)}
+    card.innerHTML=`<div class="card-head"><div><h2>Categorías</h2><p class="muted small">IDs consecutivos por negocio. La categoría 1 está reservada permanentemente para Producto Común.</p></div><button id="solrak87Refresh" class="secondary compact" type="button">Actualizar</button></div>
+      <div class="solrak87CategoryForm"><div><label>ID siguiente</label><div class="reserved">Automático</div></div><label>Nombre de categoría<input id="solrak87CategoryName" class="field" maxlength="150" placeholder="Ej. Plomería"></label><button id="solrak87Create" class="primary" type="button">Crear categoría</button></div>
+      <div class="table-wrap"><table class="solrak87CategoryTable"><thead><tr><th>ID</th><th>Nombre</th><th>Productos activos</th><th>Estado</th><th>Acción</th></tr></thead><tbody>${state.categories.map(c=>`<tr><td class="solrak87CategoryId">${c.id}</td><td><strong>${esc(c.name)}</strong>${c.id===1?'<span class="solrak87Reserved">RESERVADA</span>':''}</td><td>${productCount(c)}</td><td><span class="solrak87CategoryState ${c.active?'on':'off'}">${c.active?'ACTIVA':'INACTIVA'}</span></td><td><button class="secondary compact" data-solrak-category-active="${c.id}" data-next-active="${c.active?'0':'1'}" type="button" ${c.id===1?'disabled title="Producto Común no se puede desactivar"':''}>${c.active?'Desactivar':'Activar'}</button></td></tr>`).join("")}</tbody></table></div>
+      <div class="solrak87Integrity"><strong>Integridad:</strong> no hay botón de eliminar. Una categoría con productos activos tampoco puede desactivarse; primero debes reasignar o dar de baja esos productos.</div>`;
+    byId("solrak87Refresh").onclick=()=>refresh().catch(e=>notify(e.message,true));
+    byId("solrak87Create").onclick=createCategory;
+    byId("solrak87CategoryName").onkeydown=(event)=>{if(event.key==="Enter"){event.preventDefault();createCategory()}};
+    card.querySelectorAll("[data-solrak-category-active]").forEach(button=>button.onclick=()=>setActive(button));
+  }
+
+  async function createCategory(){
+    const input=byId("solrak87CategoryName"),name=input?.value.trim()||"";if(!name)return notify("Escribe el nombre de la categoría.",true);
+    const button=byId("solrak87Create");if(button)button.disabled=true;
+    try{const result=await api("createCategory",{name});if(input)input.value="";await refresh();notify(result.existing?`La categoría #${result.category_id} ya existía.`:`Categoría #${result.category_id} creada.`)}catch(error){notify(error.message,true)}finally{if(button)button.disabled=false}
+  }
+
+  async function setActive(button){
+    const id=Number(button.dataset.solrakCategoryActive),active=button.dataset.nextActive==="1";
+    const category=state.categories.find(c=>c.id===id);if(!category)return;
+    if(!active&&window.confirm?.(`¿Desactivar la categoría #${id} ${category.name}?\n\nNo se eliminará y su ID quedará reservado.`)===false)return;
+    button.disabled=true;
+    try{await api("setCategoryActive",{categoryId:id,active});await refresh();notify(active?"Categoría activada.":"Categoría desactivada sin borrar su ID.")}catch(error){notify(error.message,true)}finally{button.disabled=false}
+  }
+
+  async function refresh(){
+    if(!currentSession()?.token)return;
+    const result=await api("listCategories");state.categories=result.categories||[];state.loaded=true;syncCategorySelect();renderManager();
+    document.dispatchEvent(new CustomEvent("solrak:categories-updated",{detail:{categories:state.categories}}));
+  }
+
+  function sync(){ensureStyle();syncCategorySelect()}
+  function boot(){
+    ensureStyle();refresh().catch(e=>console.warn("SOLRAK categories",e));
+    document.addEventListener("click",event=>{const hit=event.target?.closest?.('[data-tab="inventario"],#openProduct,[data-editp]');if(hit)setTimeout(()=>{sync();if(!state.loaded)refresh().catch(()=>{});else renderManager()},25)},true);
+  }
+
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
+  window.SOLRAKCategoriesV0187={version:VERSION,state,api,refresh,syncCategorySelect};
+})();
