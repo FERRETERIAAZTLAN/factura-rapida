@@ -11,6 +11,7 @@ const mainPath = resolve(src, 'main.rs');
 const indexPath = resolve(dist, 'index.html');
 const ticketsPath = resolve(dist, 'solrak-sumapro-tickets-v0169.js');
 const uiOperativaPath = resolve(dist, 'solrak-ui-operativa-v0183.js');
+const shiftsPath = resolve(dist, 'solrak-shifts-v0189.js');
 
 await copyFile(resolve(root, 'solrak-hardware-v0194.js'), resolve(dist, 'solrak-hardware-v0194.js'));
 await copyFile(resolve(root, 'desktop-native-v0194', 'solrak_hardware_v0194.rs'), resolve(src, 'solrak_hardware_v0194.rs'));
@@ -98,14 +99,34 @@ if (!uiOperativa.includes(startupGuardMarker)) {
 new vm.Script(uiOperativa, { filename: 'solrak-ui-operativa-v0183.js' });
 await writeFile(uiOperativaPath, uiOperativa, 'utf8');
 
+// WebView2: cortar la realimentación síncrona del MutationObserver de turnos v0.1.89.
+// syncCashDashboard() reescribía innerHTML/textContent aun sin cambios; su propio observador de body
+// volvía a dispararse indefinidamente durante DOMContentLoaded y dejaba readyState en "interactive".
+let shifts = await readFile(shiftsPath, 'utf8');
+const shiftsStartupGuardMarker = 'if(bar.innerHTML!==barMarkup)bar.innerHTML=barMarkup;';
+if (!shifts.includes(shiftsStartupGuardMarker)) {
+  const barNeedle = '    const w=state.report?.window;bar.innerHTML=`<div><strong>Corte automático</strong><div>${w?`Turno #${w.shift_id} · ${esc(w.shift_name)} · ${minuteClock(w.start_minute)}–${minuteClock(w.end_minute)}`:"Calculado por las franjas configuradas; no requiere cierre manual."}</div></div><button id="solrak89OpenAutoCut" type="button">Ver corte del turno</button>`;byId("solrak89OpenAutoCut").onclick=()=>openReport().catch(e=>notify(e.message,true));';
+  const barPatch = '    const w=state.report?.window;const barMarkup=`<div><strong>Corte automático</strong><div>${w?`Turno #${w.shift_id} · ${esc(w.shift_name)} · ${minuteClock(w.start_minute)}–${minuteClock(w.end_minute)}`:"Calculado por las franjas configuradas; no requiere cierre manual."}</div></div><button id="solrak89OpenAutoCut" type="button">Ver corte del turno</button>`;if(bar.innerHTML!==barMarkup)bar.innerHTML=barMarkup;byId("solrak89OpenAutoCut").onclick=()=>openReport().catch(e=>notify(e.message,true));';
+  if (!shifts.includes(barNeedle)) throw new Error('Turnos v0.1.89: no se encontró render de barra automática esperado');
+  shifts = shifts.replace(barNeedle, barPatch);
+
+  const statusNeedle = '    const status=byId("solrakCash85Status");if(status)status.textContent="Corte automático por horario";';
+  const statusPatch = '    const status=byId("solrakCash85Status");if(status&&status.textContent!=="Corte automático por horario")status.textContent="Corte automático por horario";';
+  if (!shifts.includes(statusNeedle)) throw new Error('Turnos v0.1.89: no se encontró texto de estado esperado');
+  shifts = shifts.replace(statusNeedle, statusPatch);
+}
+new vm.Script(shifts, { filename: 'solrak-shifts-v0189.js' });
+await writeFile(shiftsPath, shifts, 'utf8');
+
 for (const [file, markers] of [
   [mainPath, ['HardwareStateV0194', 'print_raw_ticket_v0194', 'scale_read_v0194']],
   [indexPath, ['solrak-hardware-v0194.js']],
   [ticketsPath, [directMarker]],
   [uiOperativaPath, [startupGuardMarker, 'SYNC_OBSERVER_OPTIONS', 'syncObserver = new MutationObserver(scheduleSync)']],
+  [shiftsPath, [shiftsStartupGuardMarker, 'status&&status.textContent!=="Corte automático por horario"']],
 ]) {
   const text = await readFile(file, 'utf8');
   for (const marker of markers) if (!text.includes(marker)) throw new Error(`${file}: falta ${marker}`);
 }
 
-console.log('APPLY HARDWARE v0.1.94 OK: RAW/ESC-POS, spooler Windows, báscula COM, escáner teclado y arranque WebView sin autoobservación DOM.');
+console.log('APPLY HARDWARE v0.1.94 OK: RAW/ESC-POS, spooler Windows, báscula COM, escáner teclado y arranque WebView sin realimentación MutationObserver.');
