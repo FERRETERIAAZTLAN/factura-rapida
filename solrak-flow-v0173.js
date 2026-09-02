@@ -8,7 +8,6 @@
   let syncTimer = null;
 
   const byId = (id) => document.getElementById(id);
-  const clean = (value) => String(value ?? "").trim();
 
   function notify(message, error = false) {
     if (typeof window.notice === "function") window.notice(message, error);
@@ -25,10 +24,11 @@
     style.id = STYLE_ID;
     style.textContent = `
 /* v0.1.73: el usuario no abre/cierra caja para poder vender. */
-#posCashState,#posOpenCash,#posCloseCash,[data-fiel-action="shifts"],[data-fiel-action="cash-cut"]{display:none!important}
+#posCashState,#posOpenCash,#posCloseCash,[data-fiel-action="shifts"]{display:none!important}
 /* Finalizar venta siempre es un control sólido y visible. */
 #fielFinishSale,.fielFinish,.fielFinish.disabled{opacity:1!important;visibility:visible!important;background:#f4c400!important;color:#fff!important;box-shadow:0 -2px 8px rgba(0,0,0,.16)!important;filter:none!important}
 #fielFinishSale:hover,.fielFinish:hover{background:#e8b900!important;filter:none!important}
+#posConfirmCharge,#posConfirmCharge:disabled{opacity:1!important;background:#e97618!important;border-color:#e97618!important;color:#fff!important}
 /* Cualquier ventana funcional se abre a pantalla completa. */
 dialog.fielDialog,dialog.fielDialog.small,dialog.fielDialog.wide,dialog.frPosDialog,dialog.frPosDialog.frPayDialog{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-sizing:border-box!important}
 dialog.fielDialog::backdrop,dialog.frPosDialog::backdrop{background:rgba(20,23,26,.72)!important}
@@ -120,13 +120,18 @@ html[data-solrak-fiel="1"] #tab-solrak-reports,html[data-solrak-fiel="1"] .tab-p
   }
 
   function setMovementCopy(type) {
+    const title = byId("fielCashMovementTitle");
+    const hiddenType = byId("fielCashMovementType");
     const concept = byId("fielCashConcept");
     const reference = byId("fielCashReference");
-    if (concept)
-      concept.placeholder =
-        type === "income"
-          ? "Ej. Fondo inicial, depósito o ingreso adicional"
-          : "Ej. Retiro de ganancia, gasto o pago";
+    if (hiddenType) hiddenType.value = type;
+    if (type === "deposit") {
+      if (title) title.textContent = "Entrada · Fondo / depósito";
+      if (concept) concept.placeholder = "Ej. Fondo inicial, depósito o efectivo agregado";
+    } else {
+      if (title) title.textContent = "Salida · Retiro / ganancias";
+      if (concept) concept.placeholder = "Ej. Retiro de ganancias, efectivo retirado o pago";
+    }
     if (reference) reference.placeholder = "Referencia opcional";
   }
 
@@ -168,8 +173,8 @@ html[data-solrak-fiel="1"] #tab-solrak-reports,html[data-solrak-fiel="1"] .tab-p
   function sync() {
     injectStyle();
     bindOpenPayment();
-    bindCashAction("cash-in", "income");
-    bindCashAction("cash-out", "expense");
+    bindCashAction("cash-in", "deposit");
+    bindCashAction("cash-out", "withdrawal");
     polishFinishButton();
     hideLegacyCashControls();
   }
