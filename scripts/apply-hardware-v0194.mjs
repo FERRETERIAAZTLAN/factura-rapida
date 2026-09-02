@@ -74,22 +74,26 @@ await writeFile(ticketsPath, tickets, 'utf8');
 let uiOperativa = await readFile(uiOperativaPath, 'utf8');
 const startupGuardMarker = 'syncObserver?.disconnect();';
 if (!uiOperativa.includes(startupGuardMarker)) {
-  const stateNeedle = '  let syncQueued = false;';
-  if (!uiOperativa.includes(stateNeedle)) throw new Error('UI v0.1.83: no se encontró estado de sincronización');
+  const stateRe = /let\s+syncQueued\s*=\s*false\s*;/;
+  if (!stateRe.test(uiOperativa)) throw new Error('UI v0.1.83: no se encontró estado de sincronización');
   uiOperativa = uiOperativa.replace(
-    stateNeedle,
-    `${stateNeedle}\n  let syncObserver = null;\n  const SYNC_OBSERVER_OPTIONS = { childList: true, subtree: true, characterData: true };`
+    stateRe,
+    (match) => `${match}\n  let syncObserver = null;\n  const SYNC_OBSERVER_OPTIONS = { childList: true, subtree: true, characterData: true };`
   );
 
-  const scheduleRe = /  function scheduleSync\(\) \{[\s\S]*?\n  \}\n  function boot\(\) \{/;
-  const scheduleMatch = uiOperativa.match(scheduleRe);
-  if (!scheduleMatch) throw new Error('UI v0.1.83: no se encontró scheduleSync()/boot() esperado');
-  const replacement = `  function scheduleSync() {\n    if (syncQueued) return;\n    syncQueued = true;\n    setTimeout(() => {\n      syncQueued = false;\n      syncObserver?.disconnect();\n      try { sync(); }\n      finally { if (syncObserver && document.body?.isConnected) syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS); }\n    }, 15);\n  }\n  function boot() {`;
-  uiOperativa = uiOperativa.replace(scheduleRe, replacement);
+  const timerRe = /setTimeout\(\s*\(\)\s*=>\s*\{\s*syncQueued\s*=\s*false\s*;\s*sync\(\)\s*;\s*\}\s*,\s*15\s*\)\s*;/;
+  if (!timerRe.test(uiOperativa)) throw new Error('UI v0.1.83: no se encontró temporizador de scheduleSync esperado');
+  uiOperativa = uiOperativa.replace(
+    timerRe,
+    `setTimeout(() => {\n      syncQueued = false;\n      syncObserver?.disconnect();\n      try { sync(); }\n      finally {\n        if (syncObserver && document.body?.isConnected) syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS);\n      }\n    }, 15);`
+  );
 
-  const observerRe = /new MutationObserver\(scheduleSync\)\.observe\(document\.body,\s*\{\s*childList:\s*true,\s*subtree:\s*true,\s*characterData:\s*true\s*\}\);/;
+  const observerRe = /new\s+MutationObserver\(\s*scheduleSync\s*\)\s*\.observe\(\s*document\.body\s*,\s*\{\s*childList\s*:\s*true\s*,\s*subtree\s*:\s*true\s*,\s*characterData\s*:\s*true\s*\}\s*\)\s*;/;
   if (!observerRe.test(uiOperativa)) throw new Error('UI v0.1.83: no se encontró MutationObserver esperado');
-  uiOperativa = uiOperativa.replace(observerRe, 'syncObserver = new MutationObserver(scheduleSync); syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS);');
+  uiOperativa = uiOperativa.replace(
+    observerRe,
+    'syncObserver = new MutationObserver(scheduleSync); syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS);'
+  );
 }
 new vm.Script(uiOperativa, { filename: 'solrak-ui-operativa-v0183.js' });
 await writeFile(uiOperativaPath, uiOperativa, 'utf8');
