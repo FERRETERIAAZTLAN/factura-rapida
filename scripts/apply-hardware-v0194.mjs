@@ -1,5 +1,6 @@
 import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import vm from 'node:vm';
 
 const root = process.cwd();
 const desktop = resolve(process.argv[2] || 'desktop');
@@ -9,6 +10,7 @@ const cargoPath = resolve(desktop, 'src-tauri', 'Cargo.toml');
 const mainPath = resolve(src, 'main.rs');
 const indexPath = resolve(dist, 'index.html');
 const ticketsPath = resolve(dist, 'solrak-sumapro-tickets-v0169.js');
+const uiOperativaPath = resolve(dist, 'solrak-ui-operativa-v0183.js');
 
 await copyFile(resolve(root, 'solrak-hardware-v0194.js'), resolve(dist, 'solrak-hardware-v0194.js'));
 await copyFile(resolve(root, 'desktop-native-v0194', 'solrak_hardware_v0194.rs'), resolve(src, 'solrak_hardware_v0194.rs'));
@@ -67,13 +69,40 @@ if (!tickets.includes(directMarker)) {
 }
 await writeFile(ticketsPath, tickets, 'utf8');
 
+// WebView2: v0.1.83 observa todo el POS para mantener total/miniatura/tickets sincronizados.
+// Durante sync() el propio módulo también cambia ese DOM. Desconectar el observador mientras
+// se aplican esas mutaciones evita ciclos de autoobservación y deja el arranque de Windows finito.
+let uiOperativa = await readFile(uiOperativaPath, 'utf8');
+const startupGuardMarker = 'syncObserver.disconnect();';
+if (!uiOperativa.includes(startupGuardMarker)) {
+  const stateNeedle = '  let syncQueued = false;';
+  if (!uiOperativa.includes(stateNeedle)) throw new Error('UI v0.1.83: no se encontró estado de sincronización');
+  uiOperativa = uiOperativa.replace(
+    stateNeedle,
+    `${stateNeedle}\n  let syncObserver = null;\n  const SYNC_OBSERVER_OPTIONS = { childList: true, subtree: true, characterData: true };`
+  );
+
+  const oldSync = `  function sync() {\n    ensureStyle();\n    document.documentElement.dataset.solrakUi83 = "1";\n    ensureSidebar();\n    ensureCommandBar();\n    ensureActionBar();\n    bindLineDoubleClick();\n    applyTheme(safeStoreGet(THEME_KEY, document.documentElement.dataset.solrakUiTheme || "sky"));\n    syncTotal();\n    syncThumb();\n  }`;
+  const newSync = `  function sync() {\n    const observer = syncObserver;\n    if (observer) observer.disconnect();\n    try {\n      ensureStyle();\n      document.documentElement.dataset.solrakUi83 = "1";\n      ensureSidebar();\n      ensureCommandBar();\n      ensureActionBar();\n      bindLineDoubleClick();\n      applyTheme(safeStoreGet(THEME_KEY, document.documentElement.dataset.solrakUiTheme || "sky"));\n      syncTotal();\n      syncThumb();\n    } finally {\n      if (observer && document.body?.isConnected) observer.observe(document.body, SYNC_OBSERVER_OPTIONS);\n    }\n  }`;
+  if (!uiOperativa.includes(oldSync)) throw new Error('UI v0.1.83: no se encontró sync() esperado');
+  uiOperativa = uiOperativa.replace(oldSync, newSync);
+
+  const oldObserver = '    new MutationObserver(scheduleSync).observe(document.body, { childList: true, subtree: true, characterData: true });';
+  const newObserver = '    syncObserver = new MutationObserver(scheduleSync);\n    syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS);';
+  if (!uiOperativa.includes(oldObserver)) throw new Error('UI v0.1.83: no se encontró MutationObserver esperado');
+  uiOperativa = uiOperativa.replace(oldObserver, newObserver);
+}
+new vm.Script(uiOperativa, { filename: 'solrak-ui-operativa-v0183.js' });
+await writeFile(uiOperativaPath, uiOperativa, 'utf8');
+
 for (const [file, markers] of [
   [mainPath, ['HardwareStateV0194', 'print_raw_ticket_v0194', 'scale_read_v0194']],
   [indexPath, ['solrak-hardware-v0194.js']],
   [ticketsPath, [directMarker]],
+  [uiOperativaPath, [startupGuardMarker, 'SYNC_OBSERVER_OPTIONS', 'syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS)']],
 ]) {
   const text = await readFile(file, 'utf8');
   for (const marker of markers) if (!text.includes(marker)) throw new Error(`${file}: falta ${marker}`);
 }
 
-console.log('APPLY HARDWARE v0.1.94 OK: RAW/ESC-POS, spooler Windows, báscula COM y escáner teclado integrados en paquete nativo.');
+console.log('APPLY HARDWARE v0.1.94 OK: RAW/ESC-POS, spooler Windows, báscula COM, escáner teclado y arranque WebView sin autoobservación DOM.');
