@@ -9,20 +9,30 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   ux-audit-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm install --no-save jsdom@26.1.0
+      - name: Aplicar parche reproducible v0.1.92
+        shell: bash
+        run: |
+          if grep -q 'solrak-ux-hardening-v0192.js' index.html; then
+            echo 'SOLRAK_APPLY_UX_V0192_ALREADY_APPLIED'
+          else
+            node scripts/apply-ux-v0192.mjs
+          fi
       - name: Auditoría UX operativa
         run: node tests/solrak-ux-operational-audit-v0192.mjs
+      - name: Smoke v0.1.92
+        run: node tests/solrak-ux-hardening-v0192-smoke.mjs
       - name: Regresiones UX y POS
         run: |
           node tests/solrak-ux-core-v0190-smoke.mjs
@@ -34,3 +44,16 @@ jobs:
           node tests/solrak-credit-accounts-v0182-smoke.mjs
           node tests/solrak-held-tickets-v0176-smoke.mjs
           node tests/pos-module-smoke.mjs
+      - name: Persistir parche validado
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No hay cambios por persistir.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html pos-module.js quotes-email-module.js quotes-module.js solrak-flow-v0173.js solrak-held-tickets-v0176.js solrak-price-verifier-v0177.js solrak-reports-v0172.js solrak-sales-v0174.js solrak-shifts-v0189.js solrak-sumapro-fiel-v0171.js
+          git commit -m 'SOLRAK v0.1.92: endurecer UX operativa'
+          git push origin HEAD:feature/v0.1.92-ux-operational-audit
