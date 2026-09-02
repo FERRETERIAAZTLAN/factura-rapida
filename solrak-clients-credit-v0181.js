@@ -6,7 +6,7 @@
   const byId=(id)=>document.getElementById(id);
   const esc=(value)=>String(value??"").replace(/[&<>\"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
   const money=(value)=>Number(value||0).toLocaleString("es-MX",{style:"currency",currency:"MXN"});
-  const state={clients:[],loaded:false};
+  const state={clients:[],loaded:false,status:"idle",error:""};
   let observer=null,scheduled=false;
 
   function currentSession(){try{return session||window.session||null}catch{return window.session||null}}
@@ -54,21 +54,36 @@
     });
   }
 
+  function ensureStyle(){
+    if(byId("solrakClientCreditStyle"))return;
+    const style=document.createElement("style");style.id="solrakClientCreditStyle";
+    style.textContent=`.solrakClientToggle{display:flex;align-items:center;gap:7px;font-size:11px}.solrakClientToggle input{width:16px;height:16px;accent-color:#e97618}.solrakCreditLimit{min-width:120px;padding:7px 9px}.badge.bad{background:#fff0f0;color:#a43131}.solrakClientState{min-height:92px;display:flex;align-items:center;justify-content:center;gap:9px;border:1px solid #dde2e6;background:#fafbfc;color:#65727d;font-size:11px;font-weight:700}.solrakClientState.error{border-color:#e4c2c2;background:#fff7f7;color:#993c3c;flex-direction:column}.solrakClientState.empty{color:#6d7881}.solrakClientState button{height:31px}`;
+    document.head.appendChild(style);
+  }
+
+  function managerHead(disabled=false){return `<div class="card-head"><div><h2>Clientes y Crédito</h2><p class="muted small">Autoriza crédito, define el límite máximo de deuda y administra la baja lógica sin borrar historial.</p></div><button id="solrakClientsRefresh" class="secondary compact" type="button" ${disabled?'disabled':''}>Actualizar</button></div>`}
+
+  function bindRefresh(){const button=byId("solrakClientsRefresh");if(button)button.onclick=()=>refreshManagement().catch((e)=>notify(e.message,true))}
+
   function renderManager(){
     if(!isAdmin())return;
+    ensureStyle();
     const tab=byId("tab-clientes");if(!tab)return;
     let card=byId("solrakClientCreditManager");
-    if(!card){card=document.createElement("article");card.id="solrakClientCreditManager";card.className="card";card.style.marginTop="16px";tab.appendChild(card)}
-    const rows=state.clients;
-    card.innerHTML=`<div class="card-head"><div><h2>Clientes y Crédito</h2><p class="muted small">Autoriza crédito, define el límite máximo de deuda y administra la baja lógica sin borrar historial.</p></div><button id="solrakClientsRefresh" class="secondary compact" type="button">Actualizar</button></div>
-      <div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Estado</th><th>Saldo</th><th>Crédito</th><th>Límite</th><th>Acciones</th></tr></thead><tbody>${rows.length?rows.map((client)=>`<tr data-solrak-client-row="${esc(client.id)}"><td><strong>${esc(client.name)}</strong><div class="muted small">${esc(client.rfc||"")}</div></td><td><span class="badge ${client.active===false?'bad':'good'}">${client.active===false?'Inactivo':'Activo'}</span></td><td><strong>${money(client.balance)}</strong></td><td><label class="solrakClientToggle"><input type="checkbox" data-solrak-credit-enabled="${esc(client.id)}" ${client.credit_enabled?'checked':''} ${client.active===false?'disabled':''}> Autorizado</label></td><td><input class="field solrakCreditLimit" data-solrak-credit-limit="${esc(client.id)}" type="number" min="0" step="0.01" value="${Number(client.credit_limit||0).toFixed(2)}" ${client.active===false?'disabled':''}></td><td><div class="actions"><button class="primary compact" data-solrak-credit-save="${esc(client.id)}" type="button" ${client.active===false?'disabled':''}>Guardar crédito</button><button class="secondary compact" data-solrak-client-active="${esc(client.id)}" data-next-active="${client.active===false?'1':'0'}" type="button">${client.active===false?'Activar':'Dar de baja'}</button></div></td></tr>`).join(""):'<tr><td colspan="6" class="empty">No hay clientes.</td></tr>'}</tbody></table></div>
-      <div class="help">Una baja no elimina al cliente ni sus ventas, facturas o abonos. Si conserva saldo pendiente, todavía se pueden registrar pagos para liquidarlo; solo se bloquean nuevas ventas a crédito.</div>`;
-    if(!byId("solrakClientCreditStyle")){
-      const style=document.createElement("style");style.id="solrakClientCreditStyle";
-      style.textContent=".solrakClientToggle{display:flex;align-items:center;gap:7px;font-size:11px}.solrakClientToggle input{width:16px;height:16px;accent-color:#e97618}.solrakCreditLimit{min-width:120px;padding:7px 9px}.badge.bad{background:#fff0f0;color:#a43131}";
-      document.head.appendChild(style);
+    if(!card){card=document.createElement("article");card.id="solrakClientCreditManager";card.className="card";card.style.marginTop="10px";tab.appendChild(card)}
+    if(state.status==="loading"){
+      card.innerHTML=`${managerHead(true)}<div class="solrakClientState" role="status" aria-live="polite">Cargando clientes y crédito…</div>`;
+      bindRefresh();return;
     }
-    byId("solrakClientsRefresh").onclick=()=>refreshManagement().catch((e)=>notify(e.message,true));
+    if(state.status==="error"){
+      card.innerHTML=`${managerHead(false)}<div class="solrakClientState error" role="alert"><strong>Error al cargar clientes</strong><span>${esc(state.error||"No se pudo consultar la información.")}</span><button id="solrakClientsRetry" class="secondary compact" type="button">Reintentar</button></div>`;
+      bindRefresh();byId("solrakClientsRetry").onclick=()=>refreshManagement().catch((e)=>notify(e.message,true));return;
+    }
+    const rows=state.clients;
+    card.innerHTML=`${managerHead(false)}
+      <div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Estado</th><th>Saldo</th><th>Crédito</th><th>Límite</th><th>Acciones</th></tr></thead><tbody>${rows.length?rows.map((client)=>`<tr data-solrak-client-row="${esc(client.id)}"><td><strong>${esc(client.name)}</strong><div class="muted small">${esc(client.rfc||"")}</div></td><td><span class="badge ${client.active===false?'bad':'good'}">${client.active===false?'Inactivo':'Activo'}</span></td><td><strong>${money(client.balance)}</strong></td><td><label class="solrakClientToggle"><input type="checkbox" data-solrak-credit-enabled="${esc(client.id)}" ${client.credit_enabled?'checked':''} ${client.active===false?'disabled':''}> Autorizado</label></td><td><input class="field solrakCreditLimit" data-solrak-credit-limit="${esc(client.id)}" type="number" min="0" step="0.01" value="${Number(client.credit_limit||0).toFixed(2)}" ${client.active===false?'disabled':''}></td><td><div class="actions"><button class="primary compact" data-solrak-credit-save="${esc(client.id)}" type="button" ${client.active===false?'disabled':''}>Guardar crédito</button><button class="secondary compact" data-solrak-client-active="${esc(client.id)}" data-next-active="${client.active===false?'1':'0'}" type="button">${client.active===false?'Activar':'Dar de baja'}</button></div></td></tr>`).join(""):'<tr><td colspan="6"><div class="solrakClientState empty">No hay registros de clientes.</div></td></tr>'}</tbody></table></div>
+      <div class="help">Una baja no elimina al cliente ni sus ventas, facturas o abonos. Si conserva saldo pendiente, todavía se pueden registrar pagos para liquidarlo; solo se bloquean nuevas ventas a crédito.</div>`;
+    bindRefresh();
     card.querySelectorAll("[data-solrak-credit-save]").forEach((button)=>button.onclick=async()=>{
       const id=button.dataset.solrakCreditSave;
       const enabled=card.querySelector(`[data-solrak-credit-enabled="${id}"]`)?.checked===true;
@@ -89,10 +104,15 @@
 
   async function refreshManagement(){
     if(!currentSession()?.token||!isAdmin())return;
-    const result=await api("listClientsManagement");
-    state.clients=result.clients||[];state.loaded=true;
-    renderManager();sanitizeClientUi();
-    document.dispatchEvent(new CustomEvent("solrak:clients-credit-updated",{detail:{clients:state.clients}}));
+    state.status="loading";state.error="";renderManager();
+    try{
+      const result=await api("listClientsManagement");
+      state.clients=result.clients||[];state.loaded=true;state.status="ready";
+      renderManager();sanitizeClientUi();
+      document.dispatchEvent(new CustomEvent("solrak:clients-credit-updated",{detail:{clients:state.clients}}));
+    }catch(error){
+      state.status="error";state.error=error?.message||"No se pudo consultar clientes.";renderManager();throw error;
+    }
   }
 
   function scheduleSanitize(){if(scheduled)return;scheduled=true;setTimeout(()=>{scheduled=false;sanitizeClientUi()},15)}
