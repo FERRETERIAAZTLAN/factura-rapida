@@ -6,6 +6,7 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const desktop = resolve(process.argv[2] || 'desktop');
 const dist = resolve(desktop, 'dist');
 const indexPath = resolve(dist, 'index.html');
+const ticketPath = resolve(dist, 'solrak-sumapro-tickets-v0169.js');
 
 const files = [
   'solrak-peripherals-v0191.js',
@@ -13,6 +14,17 @@ const files = [
 ];
 for (const file of files) {
   await copyFile(resolve(repo, file), resolve(dist, file));
+}
+
+// En Windows, el mismo flujo histórico de imprimir/autoimprimir debe usar la
+// impresora térmica seleccionada en SOLRAK cuando ya existe configuración nativa.
+let ticketSource = await readFile(ticketPath, 'utf8');
+const printNeedle = `  function printReceipt(receipt, options = {}) {\n    const currentSettings = loadSettings();\n    if (!receipt) return false;\n    if (!options.force && !currentSettings.printerEnabled) return false;\n    const html = printDocument(receipt, currentSettings);`;
+const printPatch = `  function printReceipt(receipt, options = {}) {\n    const currentSettings = loadSettings();\n    if (!receipt) return false;\n    if (!options.force && !currentSettings.printerEnabled) return false;\n    const nativePrinter = window.SOLRAKWindowsNativeV0194;\n    let nativePrinterName = \"\";\n    try { nativePrinterName = localStorage.getItem(\`solrak.windows.v0194.printer:\${businessIdentity()}\`) || \"\"; } catch {}\n    if (nativePrinter?.isNative?.() && nativePrinterName) {\n      Promise.resolve(nativePrinter.printReceipt(receipt, currentSettings)).catch((error) => {\n        if (typeof window.notice === \"function\") window.notice(error?.message || \"No se pudo imprimir el ticket.\", true);\n        else console.error(\"SOLRAK impresión Windows\", error);\n      });\n      return true;\n    }\n    const html = printDocument(receipt, currentSettings);`;
+if (!ticketSource.includes('SOLRAKWindowsNativeV0194')) {
+  if (!ticketSource.includes(printNeedle)) throw new Error('Tickets v0.1.69: no se encontró printReceipt para integrar autoimpresión nativa');
+  ticketSource = ticketSource.replace(printNeedle, printPatch);
+  await writeFile(ticketPath, ticketSource, 'utf8');
 }
 
 let html = await readFile(indexPath, 'utf8');
@@ -38,4 +50,8 @@ for (const file of files) {
   const source = await readFile(resolve(dist, file), 'utf8');
   if (!source.trim()) throw new Error(`Archivo vacío en paquete Windows: ${file}`);
 }
-console.log('SOLRAK v0.1.94 web periféricos empaquetados');
+const patchedTickets = await readFile(ticketPath, 'utf8');
+if (!patchedTickets.includes('nativePrinter.printReceipt(receipt, currentSettings)')) {
+  throw new Error('El paquete Windows no redirige imprimir/autoimprimir a la impresora nativa');
+}
+console.log('SOLRAK v0.1.94 web periféricos + autoimpresión nativa empaquetados');
