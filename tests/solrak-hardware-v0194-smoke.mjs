@@ -18,7 +18,13 @@ for (const marker of [
 for (const marker of ['OpenPrinter', 'StartDocPrinter', 'WritePrinter', 'ClosePrinter']) {
   if (!helper.includes(marker)) throw new Error(`Helper WinSpool incompleto: ${marker}`);
 }
-for (const marker of ['solrak-hardware-v0194.js', 'solrak_hardware_v0194.rs', 'nativeHardware?.directPrintEnabled?.()']) {
+for (const marker of [
+  'solrak-hardware-v0194.js',
+  'solrak_hardware_v0194.rs',
+  'nativeHardware?.directPrintEnabled?.()',
+  'function solrakPrintBrowserV0194(html)',
+  'Se abrirá la impresión de Windows.',
+]) {
   if (!apply.includes(marker)) throw new Error(`apply-hardware incompleto: ${marker}`);
 }
 if (/\b(?:demo|mock|simulad[oa])\b/i.test(js + rust)) throw new Error('Hardware v0.1.94 contiene simulación o mock');
@@ -64,4 +70,4 @@ search.addEventListener('keydown', (event) => { if (event.key === 'Enter') route
 if (!hw.routeScan('2*ABC123')) throw new Error('routeScan no pudo dirigir lectura');
 if (routed !== '2*ABC123') throw new Error(`Scanner no conservó cantidad*código: ${routed}`);
 
-console.log(`SOLRAK HARDWARE v0.1.94 SMOKE OK bytes=${raw.length} barcode=000123 scanner=${routed}`);
+console.log(`SOLRAK HARDWARE v0.1.94 SMOKE OK bytes=${raw.length} barcode=000123 scanner=${routed} fallback=windows`);
