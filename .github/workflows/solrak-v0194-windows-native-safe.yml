@@ -1,0 +1,115 @@
+name: SOLRAK v0.1.94 Windows native hardware safe
+
+on:
+  push:
+    branches:
+      - feature/v0.1.94-windows-native-hardware
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'desktop-native-v0194/**'
+      - 'solrak-windows-native-v0194.js'
+      - 'scripts/apply-windows-hardware-v0194.mjs'
+      - 'scripts/apply-windows-web-v0194.mjs'
+      - 'tests/solrak-windows-native-v0194-smoke.mjs'
+      - 'tests/extract-winspool-v0194.mjs'
+      - '.github/workflows/solrak-v0194-windows-native-safe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Contrato hardware v0.1.94
+        shell: pwsh
+        run: |
+          node --check solrak-windows-native-v0194.js
+          node --check scripts/apply-windows-hardware-v0194.mjs
+          node --check scripts/apply-windows-web-v0194.mjs
+          node tests/solrak-windows-native-v0194-smoke.mjs
+
+      - name: Compilar helper Winspool de Windows
+        shell: pwsh
+        run: |
+          node tests/extract-winspool-v0194.mjs desktop-native-v0194/hardware.rs.inc winspool-v0194.cs
+          Add-Type -Path (Resolve-Path winspool-v0194.cs)
+          if(-not ('SolrakRawPrinterV0194' -as [type])){throw 'El helper Winspool no compiló'}
+          Remove-Item winspool-v0194.cs -Force
+
+      - name: Reconstruir Tauri real sin publicar
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Remove-Item native-work -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip native-work -Force
+          if(-not(Test-Path native-work/desktop/src-tauri/src/main.rs)){throw 'No se pudo extraer main.rs real'}
+          if(-not(Test-Path native-work/desktop/src-tauri/Cargo.toml)){throw 'No se pudo extraer Cargo.toml real'}
+          if(-not(Test-Path native-work/desktop/dist/index.html)){throw 'No se pudo extraer dist/index.html real'}
+          node scripts/prepare-windows-desktop.mjs native-work/desktop
+          node scripts/apply-windows-hardware-v0194.mjs native-work/desktop
+          node scripts/apply-windows-web-v0194.mjs native-work/desktop
+          if(-not(Test-Path native-work/desktop/dist/solrak-windows-native-v0194.js)){throw 'Falta adaptador Windows en dist'}
+          if(-not(Test-Path native-work/desktop/dist/solrak-peripherals-v0191.js)){throw 'Falta capa peripherals en dist'}
+
+      - name: Validar integración web empaquetada
+        shell: pwsh
+        run: |
+          node --check native-work/desktop/dist/solrak-windows-native-v0194.js
+          node --check native-work/desktop/dist/solrak-peripherals-v0191.js
+          node --check native-work/desktop/dist/solrak-sumapro-tickets-v0169.js
+          $h=Get-Content native-work/desktop/dist/index.html -Raw
+          $n=$h.IndexOf('<script src="solrak-windows-native-v0194.js"></script>')
+          $p=$h.IndexOf('<script src="solrak-peripherals-v0191.js"></script>')
+          if($n -lt 0 -or $p -lt 0 -or $n -ge $p){throw 'Orden de scripts hardware inválido'}
+          $r=Get-Content native-work/desktop/src-tauri/src/main.rs -Raw
+          foreach($m in @('list_serial_ports_v0194','scale_connect_v0194','scale_read_v0194','scale_disconnect_v0194','list_windows_printers_v0194','print_windows_raw_v0194')){if(-not $r.Contains($m)){throw "Falta comando nativo $m"}}
+          if(-not $r.Contains('WritePrinter')){throw 'No quedó integrado Winspool RAW'}
+
+      - name: Cargo check Windows real
+        shell: pwsh
+        run: |
+          Push-Location native-work/desktop/src-tauri
+          cargo generate-lockfile
+          cargo check --locked
+          Pop-Location
+
+      - name: Guardas de producción
+        shell: pwsh
+        run: |
+          $js=Get-Content solrak-windows-native-v0194.js -Raw
+          $rs=Get-Content desktop-native-v0194/hardware.rs.inc -Raw
+          if(($js+$rs) -match '(?i)cfdi|finkok'){throw 'Hardware invadió CFDI/Finkok'}
+          if(($js+$rs) -match '(?i)Math\.random|peso\s*(fake|falso)|simulated weight'){throw 'Hardware contiene simulación de dispositivo'}
+          if(-not $js.Contains('`{B${exactFolio}`')){throw 'Código de barras no usa folio exacto'}
+          if($js.Contains('padStart(')){throw 'Hardware altera el folio con relleno'}
+
+      - name: Regresiones POS y UX
+        shell: pwsh
+        run: |
+          node tests/solrak-v0193-ui-states-focus-smoke.mjs
+          node tests/solrak-ux-operational-audit-v0192.mjs
+          node tests/solrak-ux-hardening-v0192-smoke.mjs
+          node tests/solrak-peripherals-v0191-smoke.mjs
+          node tests/solrak-ux-core-v0190-smoke.mjs
+          node tests/solrak-shifts-v0189-smoke.mjs
+          node tests/solrak-caja-cortes-v0185-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+          node tests/pos-module-smoke.mjs
