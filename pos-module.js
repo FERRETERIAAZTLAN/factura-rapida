@@ -6,7 +6,7 @@
     "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/supplier-api";
   const PRODUCT_IMAGE_BASE =
     "https://jojzhohqrshsjmlirkqz.supabase.co/storage/v1/object/public/product-images/";
-  const MAX_TICKETS = 7;
+  const MAX_TICKETS = 8;
   let posState = {
     registers: [],
     openSession: null,

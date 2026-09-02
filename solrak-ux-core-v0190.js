@@ -140,7 +140,7 @@ html[data-solrak-ux90="1"] .frTicket{transition:none!important;animation:none!im
     if (event.key === "F4") { event.preventDefault(); clickAction("common-product"); return; }
     if (event.key === "F6") { event.preventDefault(); clickAction("ticket-search"); setTimeout(() => byId("fielTicketQuery")?.focus(), 0); return; }
     if (event.key === "F7") { event.preventDefault(); clickAction("return-sale"); setTimeout(() => byId("fielReturnQuery")?.focus(), 0); return; }
-    if (event.key === "F8") { event.preventDefault(); window.SOLRAKHeldTicketsV0176?.newTicket?.() || pos()?.newTicket?.(); return; }
+    if (event.key === "F8") { event.preventDefault(); window.SOLRAKHeldTicketsV0176?.newTicket ? window.SOLRAKHeldTicketsV0176.newTicket() : pos()?.newTicket?.(); return; }
     if (event.key === "F12") { event.preventDefault(); (byId("fielFinishSale") || byId("posCharge"))?.click(); return; }
     if ((event.ctrlKey || event.altKey) && /^[1-8]$/.test(event.key)) { event.preventDefault(); activateTicketByPosition(Number(event.key)); return; }
     if (event.key === "Escape" && !editing) setTimeout(focusSearch, 0);
@@ -200,7 +200,7 @@ html[data-solrak-ux90="1"] .frTicket{transition:none!important;animation:none!im
       button.title = `Hasta ${MAX_TICKETS} ventas simultáneas`;
       if (!button.dataset.solrakUx90) {
         button.dataset.solrakUx90 = "1";
-        button.onclick = (event) => { event.preventDefault(); window.SOLRAKHeldTicketsV0176?.newTicket?.() || pos()?.newTicket?.(); };
+        button.onclick = (event) => { event.preventDefault(); window.SOLRAKHeldTicketsV0176?.newTicket ? window.SOLRAKHeldTicketsV0176.newTicket() : pos()?.newTicket?.(); };
       }
     }
   }
