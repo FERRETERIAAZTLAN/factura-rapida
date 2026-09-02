@@ -26,9 +26,11 @@ const dom=new JSDOM(`<!doctype html><html><body>
 const {window}=dom;
 window.ANON_KEY='anon';
 window.session={token:'token',user:{role:'admin'}};
+window.products=[{id:'p1',name:'Producto historial',active:false}];
+window.editingProductId='p1';
+window.loadAll=async()=>{};
 window.confirm=()=>true;
 window.notice=()=>{};
-window.eval(`let products=[{id:'p1',name:'Producto historial',active:false}]; let editingProductId='p1'; async function loadAll(){};`);
 window.fetch=async(_url,options)=>{
   const body=JSON.parse(options.body);
   assert.equal(body.action,'retireProduct');
