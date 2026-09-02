@@ -1,0 +1,73 @@
+name: SOLRAK v0.1.93 UI states focus safe
+
+on:
+  push:
+    branches:
+      - feature/v0.1.93-ui-states-focus-density
+  pull_request:
+    paths:
+      - 'solrak-caja-cortes-v0185.js'
+      - 'solrak-clients-credit-v0181.js'
+      - 'solrak-categorias-v0187.js'
+      - 'solrak-ux-hardening-v0192.js'
+      - 'tests/solrak-caja-cortes-v0185-smoke.mjs'
+      - 'tests/solrak-v0193-ui-states-focus-smoke.mjs'
+      - '.github/workflows/solrak-v0193-ui-states-focus-safe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  safe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Dependencias de prueba
+        run: npm install --no-save --no-audit --no-fund jsdom@26.1.0
+
+      - name: Sintaxis de módulos modificados
+        run: |
+          node --check solrak-caja-cortes-v0185.js
+          node --check solrak-clients-credit-v0181.js
+          node --check solrak-categorias-v0187.js
+          node --check solrak-ux-hardening-v0192.js
+          node --check solrak-ux-core-v0190.js
+
+      - name: Contrato v0.1.93
+        run: node tests/solrak-v0193-ui-states-focus-smoke.mjs
+
+      - name: Regresiones operativas directas
+        run: |
+          node tests/solrak-caja-cortes-v0185-smoke.mjs
+          node tests/solrak-clients-credit-v0181-smoke.mjs
+          node tests/solrak-categorias-v0187-smoke.mjs
+          node tests/solrak-credit-accounts-v0182-smoke.mjs
+          node tests/solrak-inventory-v0175-smoke.mjs
+          node tests/solrak-reports-v0172-smoke.mjs
+          node tests/solrak-shifts-v0189-smoke.mjs
+          node tests/solrak-ux-core-v0190-smoke.mjs
+          node tests/solrak-ux-hardening-v0192-smoke.mjs
+          node tests/solrak-ux-operational-audit-v0192.mjs
+
+      - name: Regresiones POS y caja productiva
+        run: |
+          node tests/solrak-flow-v0173-smoke.mjs
+          node tests/solrak-held-tickets-v0176-smoke.mjs
+          node tests/solrak-cash-withdrawal-v0178-contract.mjs
+          node tests/solrak-pos-operations-v0171-contract.mjs
+          node tests/pos-module-smoke.mjs
+
+      - name: Guardas de alcance
+        run: |
+          ! grep -Eqi 'cfdi-api|finkok' solrak-caja-cortes-v0185.js solrak-clients-credit-v0181.js solrak-categorias-v0187.js solrak-ux-hardening-v0192.js
+          ! grep -Eq 'posCloseCash|posCountedCash|solrakCash85CloseTurn|function closeTurn' solrak-caja-cortes-v0185.js
+          grep -Eq 'MAX_TICKETS[[:space:]]*=[[:space:]]*8' solrak-ux-core-v0190.js
+          grep -q 'Corte automático por franja horaria' solrak-caja-cortes-v0185.js
