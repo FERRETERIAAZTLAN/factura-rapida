@@ -1,0 +1,102 @@
+name: SOLRAK - Test Ventas Suma v0.2.01
+
+on:
+  push:
+    branches: [feature/v0.2.01-suma-structural]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'solrak-sales-suma-v0201.js'
+      - 'solrak-sales-suma-v0201-tune.js'
+      - 'scripts/apply-sales-suma-v0201.mjs'
+      - 'tests/solrak-sales-suma-v0201-*.mjs'
+      - 'tests/fixtures/solrak-sales-suma-v0201.html'
+      - '.github/workflows/test-sales-suma-v0201.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sales-v0201:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar pruebas visuales
+        run: |
+          npm install --no-save --no-audit --no-fund --package-lock=false jsdom@26.1.0 playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Sintaxis
+        run: |
+          node --check solrak-suma-sales-v0195.js
+          node --check solrak-sales-exact-v0198.js
+          node --check solrak-sales-photo-v0199.js
+          node --check solrak-sales-reference-v0200.js
+          node --check solrak-sales-suma-v0201.js
+          node --check solrak-sales-suma-v0201-tune.js
+          node --check scripts/apply-sales-suma-v0201.mjs
+          node --check tests/solrak-sales-suma-v0201-smoke.mjs
+          node --check tests/solrak-sales-suma-v0201-visual.mjs
+      - name: Regresiones visuales previas
+        run: |
+          node tests/solrak-sales-exact-v0198-smoke.mjs
+          node tests/solrak-sales-exact-v0198-contract.mjs
+          node tests/solrak-sales-photo-v0199-smoke.mjs
+          node tests/solrak-sales-reference-v0200-smoke.mjs
+      - name: Estructura real v0.2.01
+        run: node tests/solrak-sales-suma-v0201-smoke.mjs
+      - name: Integración de paquete
+        shell: bash
+        run: |
+          rm -rf .tmp-v0201
+          mkdir -p .tmp-v0201/dist
+          cat > .tmp-v0201/dist/index.html <<'HTML'
+          <!doctype html><html><body>
+          <script src="solrak-suma-sales-v0195.js"></script>
+          <script src="solrak-common-product-v0196.js"></script>
+          <script src="solrak-report-detail-v0197.js"></script>
+          </body></html>
+          HTML
+          cp solrak-suma-sales-v0195.js .tmp-v0201/dist/
+          cp solrak-common-product-v0196.js .tmp-v0201/dist/
+          cp solrak-report-detail-v0197.js .tmp-v0201/dist/
+          node scripts/apply-sales-exact-v0198.mjs .tmp-v0201
+          node scripts/apply-sales-photo-v0199.mjs .tmp-v0201
+          node scripts/apply-sales-reference-v0200.mjs .tmp-v0201
+          node scripts/apply-sales-suma-v0201.mjs .tmp-v0201
+          test -f .tmp-v0201/dist/solrak-sales-suma-v0201.js
+          test -f .tmp-v0201/dist/solrak-sales-suma-v0201-tune.js
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('.tmp-v0201/dist/index.html').read_text()
+          names=['solrak-sales-exact-v0198.js','solrak-sales-photo-v0199.js','solrak-sales-reference-v0200.js','solrak-sales-suma-v0201.js','solrak-sales-suma-v0201-tune.js']
+          for name in names:
+              assert s.count(name) == 1, (name, s.count(name))
+          assert [s.index(name) for name in names] == sorted(s.index(name) for name in names)
+          PY
+      - name: Render 1448x1086
+        run: node tests/solrak-sales-suma-v0201-visual.mjs
+      - name: Alcance seguro
+        shell: bash
+        run: |
+          if grep -Eqi 'cfdi|finkok|saveProduct|saveInventory|updateProduct|adjustStock|Recargas|\bdemo\b|\bmock\b|simulad[oa]' solrak-sales-suma-v0201.js solrak-sales-suma-v0201-tune.js; then
+            echo 'Ventas v0.2.01 salió de alcance' >&2
+            exit 1
+          fi
+          grep -Fq 'moveWithPlaceholder' solrak-sales-suma-v0201.js
+          grep -Fq 'solrakSalesReferenceV0200Style' solrak-sales-suma-v0201.js
+          grep -Fq 'solrakSalesSumaV0201Workspace' solrak-sales-suma-v0201.js
+          grep -Fq 'bottom:170px' solrak-sales-suma-v0201-tune.js
+          grep -Fq 'solrakV0195LegacyMenu' solrak-sales-suma-v0201-tune.js
+          echo 'SOLRAK_V0201_SALES_SUMA_TEST_OK'
+      - name: Subir render para inspección
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SOLRAK-v0.2.01-suma-render
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7

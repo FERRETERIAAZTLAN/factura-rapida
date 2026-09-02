@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es" data-solrak-sales201="1">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SOLRAK v0.2.01 visual final</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font-family:"Segoe UI",Arial,sans-serif}button,input{font:inherit}.hidden{display:none!important}svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.fielBrandText strong,.fielBrandText small{display:block}.top-actions{display:flex}.frPosSearch,.frPosCartHead,.frPosLine,.fielPosStats,.fielPosTools{display:grid}.frPosGrand{display:flex}.frPreview{display:flex;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+<aside id="solrakFielSidebar">
+  <div class="fielBrand"><div class="fielBrandMark"></div><div class="fielBrandText"><strong>SOLRAK</strong><small>PUNTO DE VENTA</small></div></div>
+  <nav id="solrakSalesV0198Menu" aria-label="Ventas SOLRAK">
+    <button class="s98Hamburger" type="button" aria-label="Más opciones"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <button class="s98MenuItem" data-s98-label="Verificador Precios"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5zM8 9h8M8 13h5"/></svg><span>Verificador Precios</span></button>
+    <button class="s98MenuItem" data-s98-label="Nuevo Ticket"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5zM14 3v5h5M8 12h8M8 16h6"/></svg><span>Nuevo Ticket</span></button>
+    <button class="s98MenuItem" data-s98-label="Producto Común"><svg viewBox="0 0 24 24"><path d="m4 8 8-4 8 4-8 4zM4 8v8l8 4 8-4V8M12 12v8"/></svg><span>Producto Común</span></button>
+    <button class="s98MenuItem" data-s98-label="Consultar Ticket"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span>Consultar Ticket</span></button>
+    <button class="s98MenuItem" data-s98-label="Devolución"><svg viewBox="0 0 24 24"><path d="M9 7H4v-5M4 7c2-3 5-4 8-4a8 8 0 1 1-7 12"/></svg><span>Devolución</span></button>
+    <button class="s98MenuItem" data-s98-label="Clientes"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 11a3 3 0 1 0 0-6"/></svg><span>Clientes</span></button>
+    <button class="s98MenuItem" data-s98-label="Productos"><svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10"/></svg><span>Productos</span></button>
+    <button class="s98MenuItem" data-s98-label="Usuarios"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21a8 8 0 0 1 16 0"/></svg><span>Usuarios</span></button>
+    <button class="s98MenuItem" data-s98-label="Turnos"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Turnos</span></button>
+    <button class="s98MenuItem" data-s98-label="Caja"><svg viewBox="0 0 24 24"><path d="M3 8h18v11H3zM7 8V5h10v3M7 13h4"/></svg><span>Caja</span></button>
+    <button class="s98MenuItem" data-s98-label="Configuración"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l-2.8 2.8a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6h-4a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-2.8-2.8a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14v-4a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l2.8-2.8a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3h4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l2.8 2.8a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1v4a1.7 1.7 0 0 0-1.6 1Z"/></svg><span>Configuración</span></button>
+    <button class="s98MenuItem" data-s98-label="Reportes"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Reportes</span></button>
+  </nav>
+  <button id="fielFinishSale">FINALIZAR VENTA</button>
+</aside>
+
+<main class="shell">
+  <header class="top">
+    <div><p class="eyebrow">SISTEMA</p><h1>FERRETERIA AZTLAN</h1><p id="businessName">AZTLAN</p></div>
+    <div class="top-actions"><span class="pill ok">En línea</span><button class="fielMailTop">✉</button><button id="currentUser"><strong>Administrador</strong><small>Administrador</small></button><button id="changePinBtn">PIN</button><button id="logoutBtn">Salir</button></div>
+  </header>
+  <section id="tab-pos">
+    <div id="solrakSalesSumaV0201Workspace">
+      <div class="frPosTop"><div><h2>Agregar Inventario</h2></div><div id="solrakV0195Scale"><svg viewBox="0 0 24 24"><path d="M5 5h14v5H5zM7 10v8h10v-8M9 14h6"/></svg><span>Báscula</span></div></div>
+      <div class="s201Body">
+        <div class="s201Left">
+          <article class="s201SearchCard"><div class="frPosSearch"><input id="posSearch" aria-label="Buscar producto"><button id="solrakV0195SearchBtn">BUSCAR</button></div><div id="posResults"></div></article>
+          <article class="frPosCartCard s201CartCard">
+            <div class="frPosCartHead"><span>Código</span><span>Producto</span><span>Cantidad</span><span>Precio</span><span>Importe</span><span>Mayoreo</span><span>Descuento</span></div>
+            <div class="frPosCart"></div>
+            <div class="fielPosActions">
+              <div class="fielPosStats"><span>Cantidad de Productos <strong>0</strong></span><span>Tecla Rapida</span><span>Tipo Cambio <b>$0.00</b></span></div>
+              <div class="fielPosTools"><button class="fielPosTool" data-fiel-pos-tool="common">Producto común</button><button class="fielPosTool" data-fiel-pos-tool="discount">Aplicar Descuento a la Venta</button><button class="fielPosTool" data-fiel-pos-tool="clear">Eliminar Productos En Venta</button><button class="fielPosTool" data-fiel-pos-tool="print">Imprimir Ticket En Venta</button></div>
+            </div>
+          </article>
+        </div>
+        <aside class="summary s201Right">
+          <div class="frPreview"><img src="" alt=""><div class="frPreviewMeta"></div></div>
+          <div class="frTicketBar"><div id="posTickets"><div class="frTicket active"><strong>Ticket</strong><span class="s98TicketNumber">#769</span><span class="frTicketClose">×</span></div></div><button class="frTicketNew" id="posNewTicket">Nuevo ticket</button></div>
+          <div class="frPosTotals"><div><span>Subtotal</span><strong>$0.00</strong></div><div><span>IVA</span><strong>$0.00</strong></div><div class="frPosGrand"><span>Total:</span><strong>$0.00</strong></div></div>
+        </aside>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="solrakV0195Footer">martes, 1 de septiembre de 2026 04:02:31</div>
+<div id="solrakSalesV0198StatusGlyph"></div>
+</body>
+</html>
