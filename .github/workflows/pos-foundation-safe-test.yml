@@ -50,10 +50,14 @@ jobs:
           $qe=Get-Content quotes-email-module.js -Raw
           foreach($m in @('pos-module.js?v=1','data-fr-pos-loader')){if(-not $qe.Contains($m)){throw "Loader POS faltante: $m"}}
           $pm=Get-Content pos-module.js -Raw
-          foreach($m in @('Punto de venta','Proveedores','completeSale','openCash','closeCash','posSearch','PRODUCT_IMAGE_BASE')){
+          foreach($m in @('Punto de venta','Proveedores','completeSale','ensureOperationalSession','posSearch','PRODUCT_IMAGE_BASE')){
             if(-not $pm.Contains($m)){throw "Contrato UI POS incompleto: $m"}
           }
-          Write-Host 'POS_STATIC_AND_UI_SMOKE_OK_NO_REAL_SALE'
+          foreach($legacy in @('posOpenCash','posCloseCash','posOpenDialog','posCloseDialog')){
+            if($pm.Contains($legacy)){throw "POS: regresó control manual de caja: $legacy"}
+          }
+          if($pm -match 'posApi\(["''](?:openCash|closeCash)["'']'){throw 'POS: regresó operación manual openCash/closeCash'}
+          Write-Host 'POS_STATIC_AND_UI_SMOKE_OK_NO_REAL_SALE_AUTOMATIC_SHIFTS'
 
       - name: Health POS y Proveedores sin escribir datos
         shell: pwsh
@@ -114,8 +118,10 @@ jobs:
           $qe=Get-Content desktop/dist/quotes-email-module.js -Raw
           if(-not $qe.Contains('pos-module.js?v=1')){throw 'El paquete no carga pos-module.js'}
           $pm=Get-Content desktop/dist/pos-module.js -Raw
-          foreach($m in @('Punto de venta','Proveedores','completeSale','openCash','closeCash')){if(-not $pm.Contains($m)){throw "POS empaquetado incompleto: $m"}}
-          Write-Host 'WINDOWS_PACKAGE_POS_MODULE_OK'
+          foreach($m in @('Punto de venta','Proveedores','completeSale','ensureOperationalSession')){if(-not $pm.Contains($m)){throw "POS empaquetado incompleto: $m"}}
+          foreach($legacy in @('posOpenCash','posCloseCash','posOpenDialog','posCloseDialog')){if($pm.Contains($legacy)){throw "POS empaquetado reintrodujo control manual de caja: $legacy"}}
+          if($pm -match 'posApi\(["''](?:openCash|closeCash)["'']'){throw 'POS empaquetado reintrodujo openCash/closeCash manual'}
+          Write-Host 'WINDOWS_PACKAGE_POS_MODULE_OK_AUTOMATIC_SHIFTS'
 
       - name: Login base sigue estable
         shell: pwsh
