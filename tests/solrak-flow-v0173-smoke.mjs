@@ -66,11 +66,11 @@ window.FacturaRapidaPOS = {
   },
 };
 
-dom.window.document.querySelector('[data-fiel-action="cash-in"]').onclick = () => {
+window.document.querySelector('[data-fiel-action="cash-in"]').onclick = () => {
   assert.ok(state.openSession?.id);
   cashInCalls += 1;
 };
-dom.window.document.querySelector('[data-fiel-action="cash-out"]').onclick = () => {
+window.document.querySelector('[data-fiel-action="cash-out"]').onclick = () => {
   assert.ok(state.openSession?.id);
   cashOutCalls += 1;
 };
@@ -106,4 +106,5 @@ await new Promise((resolve) => setTimeout(resolve, 20));
 assert.equal(cashOutCalls, 1);
 assert.match(window.document.getElementById("fielCashConcept").placeholder, /Retiro de ganancia/);
 
+window.close();
 console.log("SOLRAK_V0173_FLOW_SMOKE_OK");
