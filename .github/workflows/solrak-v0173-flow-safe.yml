@@ -1,0 +1,41 @@
+name: SOLRAK v0.1.73 Continuous Cash Fullscreen Safe Test
+
+on:
+  push:
+    branches: [feature/v0.1.73-caja-flujo-fullscreen]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar flujo v0.1.73
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund --package-lock=false jsdom@25
+          node --check solrak-flow-v0173.js
+          node tests/solrak-flow-v0173-smoke.mjs
+          node tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node tests/solrak-reports-v0172-smoke.mjs
+          node tests/pos-module-smoke.mjs
+          if grep -Eiq 'cfdi-api|finkok|Recargas y Servicios' solrak-flow-v0173.js; then
+            echo 'v0.1.73 invadió CFDI/Finkok o Recargas' >&2
+            exit 1
+          fi
+          grep -q 'openingAmount: 0' solrak-flow-v0173.js
+          grep -q 'type.value = "deposit"' solrak-flow-v0173.js
+          grep -q 'type.value = "withdrawal"' solrak-flow-v0173.js
+          grep -q 'dialog.fielDialog' solrak-flow-v0173.js
+          grep -q 'fielFinish.disabled' solrak-flow-v0173.js
+          echo 'SOLRAK_V0173_SAFE_OK'
