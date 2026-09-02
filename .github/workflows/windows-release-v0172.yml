@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 env:
   FR_VERSION: "0.1.72"
@@ -27,7 +28,7 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       FR_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -266,12 +267,21 @@ jobs:
           $j | ConvertTo-Json -Depth 8 | Set-Content release-files/latest.json -Encoding UTF8
           "FR_LATEST_SHA256=$((Get-FileHash release-files/latest.json -Algorithm SHA256).Hash.ToLowerInvariant())" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
+      - name: Respaldar instalador firmado
+        uses: actions/upload-artifact@v4
+        with:
+          name: SOLRAK-v0.1.72-windows-signed
+          path: release-files/*
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Publicar estable y marcar Latest explícitamente
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
           $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
           gh release create $tag "release-files/$env:FR_ASSET_EXE" "release-files/$env:FR_ASSET_EXE.sig" release-files/latest.json --repo $repo --target '${{ github.sha }}' --title "SOLRAK $tag" --notes 'v0.1.72 estable: restaura Venta como acceso principal y conecta los seis Reportes al POS real con filtros, impresión y exportación CSV. Sin Recargas. Producto común exige nombre. Facturación, CFDI/Finkok, tickets, caja, inventario y updater preservados. EXE real validado.' --draft
+          if($LASTEXITCODE -ne 0){throw 'GitHub no permitió crear el release v0.1.72'}
           $r=$null
           for($i=1;$i -le 20;$i++){$rels=gh api "/repos/$repo/releases?per_page=100" | ConvertFrom-Json;$r=$rels | Where-Object {$_.tag_name -eq $tag -and $_.draft} | Select-Object -First 1;if($r -and $r.assets.Count -ge 3){break};Start-Sleep -Seconds 2}
           if(-not $r){throw 'No se encontró borrador de release'}
