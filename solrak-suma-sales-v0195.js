@@ -187,6 +187,8 @@ html[data-solrak-suma-sales95="1"] #tab-pos #posReceipt{display:none!important}
       ["Más Vendidos", "sales-report"],
     ], true));
     sidebar.insertBefore(menu, byId("fielFinishSale"));
+    const finish = byId("fielFinishSale");
+    if (finish && finish.textContent !== "FINALIZAR VENTA") finish.textContent = "FINALIZAR VENTA";
     return true;
   }
 
