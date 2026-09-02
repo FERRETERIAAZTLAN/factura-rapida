@@ -100,11 +100,15 @@ fn serial_item(info: serialport::SerialPortInfo) -> SerialPortItem {
 
 fn parse_weight(raw: &str) -> Option<(f64, String)> {
     let lower = raw.to_ascii_lowercase();
-    let unit = if lower.contains("kg") {
+    let units: Vec<&str> = lower
+        .split(|ch: char| !ch.is_ascii_alphabetic())
+        .filter(|token| !token.is_empty())
+        .collect();
+    let unit = if units.iter().any(|token| *token == "kg") {
         "kg"
-    } else if lower.contains("lbs") || lower.contains(" lb") {
+    } else if units.iter().any(|token| *token == "lb" || *token == "lbs") {
         "lb"
-    } else if lower.contains('g') {
+    } else if units.iter().any(|token| *token == "g") {
         "g"
     } else {
         "kg"
@@ -289,13 +293,19 @@ pub fn print_raw_ticket_v0194(_printer_name: String, _data: Vec<u8>) -> Result<P
 #[cfg(test)]
 mod tests {
     use super::parse_weight;
+
     #[test]
     fn parses_common_scale_frames() {
         let (weight, unit) = parse_weight("ST,GS,+  12.340 kg").expect("kg");
         assert!((weight - 12.340).abs() < 0.0001);
         assert_eq!(unit, "kg");
+
         let (weight, unit) = parse_weight(" 250 g").expect("g");
         assert_eq!(weight, 250.0);
         assert_eq!(unit, "g");
+
+        let (weight, unit) = parse_weight("ST,GS,+ 12.340").expect("status frame");
+        assert!((weight - 12.340).abs() < 0.0001);
+        assert_eq!(unit, "kg");
     }
 }
