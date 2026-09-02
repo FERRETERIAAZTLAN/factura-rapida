@@ -132,8 +132,10 @@
   }
 
   installBridge();
-  const mount=()=>{ensureUi();const badge=byId("solrakN92Bridge");if(badge){info().then(i=>{badge.className="solrakN92Status ok";badge.textContent=i.directPrint?"Windows · impresión directa activa":"Windows · puente activo";}).catch(()=>{badge.className="solrakN92Status bad";badge.textContent="Puente nativo no disponible";});}};
-  new MutationObserver(mount).observe(document.documentElement,{childList:true,subtree:true}); document.addEventListener("DOMContentLoaded",mount); mount();
+  let bridgeChecked=false;
+  const updateBridgeStatus=()=>{const badge=byId("solrakN92Bridge");if(!badge||bridgeChecked)return;bridgeChecked=true;info().then(i=>{if(!badge.isConnected)return;badge.className="solrakN92Status ok";const text=i.directPrint?"Windows · impresión directa activa":"Windows · puente activo";if(badge.textContent!==text)badge.textContent=text;}).catch(()=>{if(!badge.isConnected)return;badge.className="solrakN92Status bad";if(badge.textContent!=="Puente nativo no disponible")badge.textContent="Puente nativo no disponible";});};
+  const mount=()=>{if(!ensureUi())return false;updateBridgeStatus();return true;};
+  const mountObserver=new MutationObserver(()=>{if(mount())mountObserver.disconnect();});mountObserver.observe(document.documentElement,{childList:true,subtree:true});document.addEventListener("DOMContentLoaded",()=>{if(mount())mountObserver.disconnect();});if(mount())mountObserver.disconnect();
   window.addEventListener("beforeunload",()=>{stopLive();if(scaleConnected)disconnectScale().catch(()=>{});});
   window.SOLRAKNativePeripheralsV0192={version:VERSION,info,listPorts,listPrinters,connectScale,disconnectScale,readWeight,printTicket,tryPrintReceipt,buildTicketText};
 })();

@@ -520,8 +520,9 @@ html[data-solrak-sumapro-tickets="1"] #tab-timbres{width:min(1120px,100%);margin
   }
 
   function receiptMarkup(receipt, currentSettings = loadSettings()) {
-    const number = String(receipt?.saleNumber || 0).padStart(6, "0");
-    const barcodeValue = number;
+    const rawNumber = String(receipt?.saleNumber ?? receipt?.folio ?? "0").trim();
+    const number = (rawNumber || "0").padStart(6, "0");
+    const barcodeValue = rawNumber || number;
     const date = new Date(receipt?.createdAt || Date.now()).toLocaleString(
       "es-MX",
       { dateStyle: "short", timeStyle: "short" },
@@ -572,6 +573,7 @@ html[data-solrak-sumapro-tickets="1"] #tab-timbres{width:min(1120px,100%);margin
     const currentSettings = loadSettings();
     if (!receipt) return false;
     if (!options.force && !currentSettings.printerEnabled) return false;
+    if (window.SOLRAKNativePeripheralsV0192?.tryPrintReceipt?.(receipt, currentSettings, options)) return true;
     const html = printDocument(receipt, currentSettings);
     if (typeof window.__SOLRAK_TEST_PRINT__ === "function") {
       window.__SOLRAK_TEST_PRINT__({ html, receipt, settings: currentSettings });
@@ -712,12 +714,12 @@ html[data-solrak-sumapro-tickets="1"] #tab-timbres{width:min(1120px,100%);margin
     byId("solrakTicketTest").onclick = () => {
       saveTicketSettings(false);
       printReceipt(sampleReceipt(), { force: true });
-      showTicketMessage("Ticket de prueba enviado a la impresión de Windows.");
+      showTicketMessage("Procesando ticket de prueba…");
     };
     byId("solrakTicketReprint").onclick = () => {
       if (!lastReceipt) return;
       printReceipt(lastReceipt, { force: true });
-      showTicketMessage("Último ticket enviado nuevamente a impresión.");
+      showTicketMessage("Procesando reimpresión…");
     };
     syncTicketForm();
   }
