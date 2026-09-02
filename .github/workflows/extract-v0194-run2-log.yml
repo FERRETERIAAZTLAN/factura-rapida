@@ -1,4 +1,4 @@
-name: SOLRAK v0.1.94 - Extraer diagnóstico aceptación R2
+name: SOLRAK v0.1.94 - Extraer diagnóstico run Windows
 
 on:
   push:
@@ -19,27 +19,26 @@ jobs:
         with:
           ref: release/v0.1.94-hardware
           fetch-depth: 0
-      - name: Extraer hitos del run 33614857857
+      - name: Extraer error del diagnóstico 33616500812
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          rm -rf runlogs diagnostics-v0194 runlogs.zip
+          rm -rf runlogs runlogs.zip
           mkdir -p runlogs diagnostics-v0194
-          gh api "/repos/${{ github.repository }}/actions/runs/33614857857/logs" > runlogs.zip
+          gh api "/repos/${{ github.repository }}/actions/runs/33616500812/logs" > runlogs.zip
           unzip -q runlogs.zip -d runlogs
           {
-            echo 'RUN=33614857857'
-            echo 'HEAD=11e50df8a2322a53b258f62cba3106efce2a3a95'
-            grep -RInaE 'EXE real no pasó aceptación|START 0\.1\.94|SETUP_OK 0\.1\.94|PAGE_LOAD|WEBVIEW_MILESTONE|LOGIN_UI_READY|PANIC|SCRIPT_ERROR|UNHANDLED|ERROR' runlogs || true
-          } > diagnostics-v0194/acceptance-run2.txt
-          test -s diagnostics-v0194/acceptance-run2.txt
-          cat diagnostics-v0194/acceptance-run2.txt
+            echo 'RUN=33616500812'
+            echo 'HEAD=88fe6e03b9eb95c56f86e7395fab2f583e97d665'
+            grep -RInaE 'Error|ERROR|Exception|throw|Falta|falta|incomplet|No se pudo|failed|FAIL|audit|AUDIT' runlogs || true
+          } > diagnostics-v0194/packaging-diagnostic-run3.txt
+          cat diagnostics-v0194/packaging-diagnostic-run3.txt
       - name: Guardar diagnóstico
         run: |
           set -euo pipefail
           git config user.name 'FERRETERIAAZTLAN'
           git config user.email '48nym4hh7h@privaterelay.appleid.com'
-          git add diagnostics-v0194/acceptance-run2.txt
-          git commit -m 'diagnostic: extraer log de aceptación v0.1.94 run 2'
+          git add diagnostics-v0194/packaging-diagnostic-run3.txt
+          git commit -m 'diagnostic: extraer fallo del instrumentador v0.1.94'
           git push origin HEAD:release/v0.1.94-hardware
