@@ -1,0 +1,47 @@
+name: SOLRAK v0.1.94 - Aplicar fix de arranque y relanzar release
+
+on:
+  push:
+    branches: [release/v0.1.94-hardware]
+    paths:
+      - '.github/workflows/apply-v0194-startup-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  fix-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/v0.1.94-hardware
+          fetch-depth: 0
+
+      - name: Aplicar parche de miniatura no bloqueante
+        run: |
+          set -euo pipefail
+          node scripts/patch-v0183-startup-v0194.mjs solrak-ui-operativa-v0183.js
+          node --check solrak-ui-operativa-v0183.js
+          grep -F 'loading="lazy" decoding="async"' solrak-ui-operativa-v0183.js >/dev/null
+
+      - name: Guardar fix en rama de release
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- solrak-ui-operativa-v0183.js; then
+            echo 'Parche ya estaba aplicado'
+          else
+            git config user.name 'FERRETERIAAZTLAN'
+            git config user.email '48nym4hh7h@privaterelay.appleid.com'
+            git add solrak-ui-operativa-v0183.js
+            git commit -m 'fix: evitar que miniatura v0.1.83 bloquee load en Windows'
+            git push origin HEAD:release/v0.1.94-hardware
+          fi
+
+      - name: Relanzar release completo v0.1.94 R2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run windows-release-v0194-r2.yml --repo '${{ github.repository }}' --ref release/v0.1.94-hardware
