@@ -54,12 +54,12 @@ jobs:
         run: |
           grep -q 'const MAX_TICKETS = 8;' pos-module.js
           grep -Fq 'const barcodeValue = String(receipt?.saleNumber || 0);' solrak-sumapro-tickets-v0169.js
-          ! grep -Pq '(^|[^.\w])(confirm|prompt)\s*\(|window\.(confirm|prompt)\s*\(' pos-module.js solrak-sumapro-fiel-v0171.js
+          ! grep -Pq '(^|[^.\w])(alert|confirm|prompt)\s*\(|window\.(alert|confirm|prompt)\s*\(' ./*.js index.html
           grep -q 'confirmSaleVoid' solrak-sumapro-fiel-v0171.js
           grep -q 'confirmReturnImpact' solrak-sumapro-fiel-v0171.js
+          grep -q 'SOLRAKDialog.confirm' quotes-module.js
+          grep -q 'SOLRAKDialog.prompt' quotes-email-module.js
           grep -q 'solrak-keyboard-ticket-ux-v0190.js' index.html
-          echo 'Referencias nativas restantes en JS raíz:'
-          grep -Pn '(^|[^.\w])(alert|confirm|prompt)\s*\(|window\.(alert|confirm|prompt)\s*\(' ./*.js || true
       - name: Guardas de alcance
         run: |
           ! grep -Eqi 'cfdi-api|finkok' solrak-keyboard-ticket-ux-v0190.js supabase/functions/ticket-ux-api/index.ts
@@ -69,6 +69,6 @@ jobs:
           if git diff --quiet; then echo 'Sin cambios pendientes.'; exit 0; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html pos-module.js solrak-sumapro-fiel-v0171.js solrak-sumapro-tickets-v0169.js solrak-shifts-v0189.js
-          git commit -m 'chore: integrar UX teclado y ticket v0.1.90'
+          git add index.html pos-module.js solrak-sumapro-fiel-v0171.js solrak-sumapro-tickets-v0169.js solrak-shifts-v0189.js quotes-email-module.js quotes-module.js solrak-flow-v0173.js solrak-held-tickets-v0176.js solrak-price-verifier-v0177.js solrak-reports-v0172.js solrak-sales-v0174.js
+          git commit -m 'chore: eliminar diálogos nativos UX v0.1.90'
           git push origin HEAD:feature/v0.1.90-keyboard-ticket-ux
