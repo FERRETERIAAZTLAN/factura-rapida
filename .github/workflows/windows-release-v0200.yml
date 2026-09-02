@@ -1,4 +1,4 @@
-name: SOLRAK - Release v0.2.00 Windows
+name: SOLRAK - Release v0.2.0 Windows
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   actions: write
 
 env:
-  FR_VERSION: "0.2.00"
+  FR_VERSION: "0.2.0"
   FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
   FR_FIX1_COMMIT: "73ff1fa0d4345d492278eef5f2dc836e7ece7695"
   FR_FIX1_SHA256: "144c3fc22729fde4f440088b20f880b90363d0cc8e3b915fcf181e6ef9178134"
@@ -41,7 +41,7 @@ jobs:
       - name: Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Preflight completo v0.2.00
+      - name: Preflight completo v0.2.0
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
@@ -254,7 +254,7 @@ jobs:
             Start-Sleep -Seconds 15
             if($p.HasExited){throw 'EXE se cerró después de LOGIN_UI_READY'}
           } finally {if(-not $p.HasExited){Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue}}
-          Write-Host 'WINDOWS_REAL_ACCEPTANCE_0.2.00_SOLRAK_OK'
+          Write-Host 'WINDOWS_REAL_ACCEPTANCE_0.2.0_SOLRAK_OK'
 
       - name: Preparar assets firmados
         shell: pwsh
@@ -271,7 +271,7 @@ jobs:
           "FR_EXE_SHA256=$eh" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "FR_SIG_SHA256=$sh" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           $repo='${{ github.repository }}';$tag="v$env:FR_VERSION";$signature=(Get-Content "release-files/$name.sig" -Raw).Trim();$url="https://github.com/$repo/releases/download/$tag/$name"
-          $notes='SOLRAK v0.2.00: pantalla principal de VENTAS calibrada más fielmente a la referencia original: proporciones laterales, encabezado, buscador con borde naranja, tabla, vista previa, tickets, herramientas inferiores, Total y barra de estado. Conserva Producto Común con nombre, reportes, caja, impresión, báscula, lector y funciones existentes. Sin cambios de inventario, precios, existencias ni CFDI/Finkok.'
+          $notes='SOLRAK v0.2.0: pantalla principal de VENTAS calibrada más fielmente a la referencia original: proporciones laterales, encabezado, buscador con borde naranja, tabla, vista previa, tickets, herramientas inferiores, Total y barra de estado. Conserva Producto Común con nombre, reportes, caja, impresión, báscula, lector y funciones existentes. Sin cambios de inventario, precios, existencias ni CFDI/Finkok.'
           $j=[ordered]@{version=$env:FR_VERSION;notes=$notes;pub_date=[DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ');platforms=[ordered]@{'windows-x86_64'=[ordered]@{signature=$signature;url=$url}}}
           $j | ConvertTo-Json -Depth 8 | Set-Content release-files/latest.json -Encoding UTF8
           "FR_LATEST_SHA256=$((Get-FileHash release-files/latest.json -Algorithm SHA256).Hash.ToLowerInvariant())" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
@@ -279,17 +279,17 @@ jobs:
       - name: Respaldar instalador firmado
         uses: actions/upload-artifact@v4
         with:
-          name: SOLRAK-v0.2.00-windows-signed
+          name: SOLRAK-v0.2.0-windows-signed
           path: release-files/*
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publicar v0.2.00 estable y Latest
+      - name: Publicar v0.2.0 estable y Latest
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
           $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
-          gh release create $tag "release-files/$env:FR_ASSET_EXE" "release-files/$env:FR_ASSET_EXE.sig" release-files/latest.json --repo $repo --target '${{ github.sha }}' --title "SOLRAK $tag" --notes 'v0.2.00 estable: pantalla principal de VENTAS calibrada más fielmente a la referencia visual suministrada, conservando funciones reales de SOLRAK. EXE real validado y updater firmado.' --draft
+          gh release create $tag "release-files/$env:FR_ASSET_EXE" "release-files/$env:FR_ASSET_EXE.sig" release-files/latest.json --repo $repo --target '${{ github.sha }}' --title "SOLRAK $tag" --notes 'v0.2.0 estable: pantalla principal de VENTAS calibrada más fielmente a la referencia visual suministrada, conservando funciones reales de SOLRAK. EXE real validado y updater firmado.' --draft
           $r=$null
           for($i=1;$i -le 20;$i++){$rels=gh api "/repos/$repo/releases?per_page=100" | ConvertFrom-Json;$r=$rels|Where-Object {$_.tag_name -eq $tag -and $_.draft}|Select-Object -First 1;if($r -and $r.assets.Count -ge 3){break};Start-Sleep -Seconds 2}
           if(-not $r){throw 'No se encontró borrador'}
@@ -307,11 +307,11 @@ jobs:
           $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
           $r=gh api "/repos/$repo/releases/tags/$tag" | ConvertFrom-Json;$latest=gh api "/repos/$repo/releases/latest" | ConvertFrom-Json
           if($r.draft -or $r.prerelease -or [string]$r.tag_name -ne $tag){throw 'Release inválida'}
-          if([string]$latest.tag_name -ne $tag){throw 'v0.2.00 no es Latest'}
+          if([string]$latest.tag_name -ne $tag){throw 'v0.2.0 no es Latest'}
           foreach($n in @($env:FR_ASSET_EXE,"$env:FR_ASSET_EXE.sig",'latest.json')){if(-not($r.assets|Where-Object {$_.name -eq $n})){throw "Falta asset $n"}}
           $j=Invoke-RestMethod "https://github.com/$repo/releases/latest/download/latest.json" -TimeoutSec 30
           if([string]$j.version -ne $env:FR_VERSION){throw 'latest.json incorrecto'}
-          Write-Host 'PUBLIC_RELEASE_OK v0.2.00 SOLRAK LATEST'
+          Write-Host 'PUBLIC_RELEASE_OK v0.2.0 SOLRAK LATEST'
 
       - name: Limpiar borrador si falla
         if: failure()
