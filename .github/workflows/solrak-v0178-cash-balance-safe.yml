@@ -1,0 +1,45 @@
+name: SOLRAK v0.1.78 salidas saldo seguro
+
+on:
+  push:
+    branches:
+      - feature/v0.1.78-salidas-saldo-seguro
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Dependencia de pruebas
+        run: npm install --no-save jsdom@26.1.0
+
+      - name: Contrato v0.1.78 saldo de caja
+        run: node tests/solrak-cash-withdrawal-v0178-contract.mjs
+
+      - name: Regresiones POS recientes
+        run: |
+          node tests/solrak-price-verifier-v0177-smoke.mjs
+          node tests/solrak-held-tickets-v0176-smoke.mjs
+          node tests/solrak-inventory-v0175-smoke.mjs
+          node tests/solrak-sales-v0174-smoke.mjs
+          node tests/solrak-flow-v0173-smoke.mjs
+          node tests/solrak-reports-v0172-smoke.mjs
+          node tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node tests/solrak-pos-operations-v0171-contract.mjs
+          node tests/pos-module-smoke.mjs
+
+      - name: Guardas de seguridad
+        run: |
+          grep -q "for update" supabase/migrations/202609020003_cash_withdrawal_balance_guard.sql
+          grep -q "Saldo insuficiente en caja" supabase/migrations/202609020003_cash_withdrawal_balance_guard.sql
+          grep -q "new.movement_type = 'withdrawal'" supabase/migrations/202609020003_cash_withdrawal_balance_guard.sql
+          ! grep -Eqi 'cfdi|finkok' supabase/migrations/202609020003_cash_withdrawal_balance_guard.sql
