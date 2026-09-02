@@ -1,0 +1,82 @@
+name: SOLRAK - Test Ventas Referencia v0.2.00
+
+on:
+  push:
+    branches: [fix/v0.2.00-ventas-referencia-fiel]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'solrak-sales-reference-v0200.js'
+      - 'scripts/apply-sales-reference-v0200.mjs'
+      - 'tests/solrak-sales-reference-v0200-*.mjs'
+      - '.github/workflows/test-sales-reference-v0200.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sales-v0200:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar jsdom
+        run: npm install --no-save --no-audit --no-fund --package-lock=false jsdom@26.1.0
+      - name: Sintaxis
+        run: |
+          node --check solrak-suma-sales-v0195.js
+          node --check solrak-common-product-v0196.js
+          node --check solrak-report-detail-v0197.js
+          node --check solrak-sales-exact-v0198.js
+          node --check solrak-sales-photo-v0199.js
+          node --check solrak-sales-reference-v0200.js
+          node --check scripts/apply-sales-reference-v0200.mjs
+      - name: Regresiones previas
+        run: |
+          node tests/solrak-common-product-v0196-smoke.mjs
+          node tests/solrak-report-detail-v0197-smoke.mjs
+          node tests/solrak-report-detail-v0197-visual-contract.mjs
+          node tests/solrak-sales-exact-v0198-smoke.mjs
+          node tests/solrak-sales-exact-v0198-contract.mjs
+          node tests/solrak-sales-photo-v0199-smoke.mjs
+      - name: Ventas v0.2.00
+        run: node tests/solrak-sales-reference-v0200-smoke.mjs
+      - name: Integración de paquete
+        shell: bash
+        run: |
+          rm -rf .tmp-v0200
+          mkdir -p .tmp-v0200/dist
+          cat > .tmp-v0200/dist/index.html <<'HTML'
+          <!doctype html><html><body>
+          <script src="solrak-suma-sales-v0195.js"></script>
+          <script src="solrak-common-product-v0196.js"></script>
+          <script src="solrak-report-detail-v0197.js"></script>
+          </body></html>
+          HTML
+          cp solrak-suma-sales-v0195.js .tmp-v0200/dist/
+          cp solrak-common-product-v0196.js .tmp-v0200/dist/
+          cp solrak-report-detail-v0197.js .tmp-v0200/dist/
+          node scripts/apply-sales-exact-v0198.mjs .tmp-v0200
+          node scripts/apply-sales-photo-v0199.mjs .tmp-v0200
+          node scripts/apply-sales-reference-v0200.mjs .tmp-v0200
+          test -f .tmp-v0200/dist/solrak-sales-reference-v0200.js
+          test "$(grep -o 'solrak-sales-reference-v0200.js' .tmp-v0200/dist/index.html | wc -l)" -eq 1
+          test "$(grep -o 'solrak-sales-photo-v0199.js' .tmp-v0200/dist/index.html | wc -l)" -eq 1
+          test "$(grep -o 'solrak-sales-exact-v0198.js' .tmp-v0200/dist/index.html | wc -l)" -eq 1
+      - name: Alcance seguro
+        shell: bash
+        run: |
+          if grep -Eqi 'cfdi|finkok|saveProduct|saveInventory|updateProduct|adjustStock|Recargas|\bdemo\b|\bmock\b|simulad[oa]' solrak-sales-reference-v0200.js; then
+            echo 'Ventas v0.2.00 salió de alcance' >&2
+            exit 1
+          fi
+          grep -Fq -- '--s200-side:245px' solrak-sales-reference-v0200.js
+          grep -Fq -- '--s200-top:52px' solrak-sales-reference-v0200.js
+          grep -Fq -- '--s200-right:250px' solrak-sales-reference-v0200.js
+          grep -Fq -- 'border:1.5px solid #ff6b22' solrak-sales-reference-v0200.js
+          grep -Fq -- 'bottom:99px' solrak-sales-reference-v0200.js
+          grep -Fq -- 'bottom:106px' solrak-sales-reference-v0200.js
+          echo 'SOLRAK_V0200_SALES_REFERENCE_TEST_OK'
