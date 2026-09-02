@@ -1,0 +1,36 @@
+name: SOLRAK - Validar y relanzar v0.2.1
+
+on:
+  push:
+    branches: [release/v0.2.01-suma-structural]
+    paths:
+      - '.github/workflows/kick-release-v0201-startup-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  validate-and-dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar protección de arranque real
+        run: |
+          npm install --no-save --no-audit --no-fund --package-lock=false jsdom@26.1.0
+          node --check solrak-sales-suma-v0201.js
+          node --check solrak-sales-suma-v0201-tune.js
+          node --check solrak-sales-suma-v0201-startup-fix.js
+          node --check scripts/apply-sales-suma-v0201.mjs
+          node --check tests/solrak-sales-suma-v0201-startup-safe.mjs
+          node tests/solrak-sales-suma-v0201-startup-safe.mjs
+          echo 'SOLRAK_V0201_STARTUP_FIX_VALIDATED'
+      - name: Relanzar release Windows completa
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run windows-release-v0201.yml --ref release/v0.2.01-suma-structural
