@@ -1,0 +1,46 @@
+name: SOLRAK v0.1.72 Venta Reportes Safe Test
+
+on:
+  push:
+    branches: [release/v0.1.72-venta-reportes]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Dependencias de pruebas
+        run: npm install --no-save --no-audit --no-fund --package-lock=false jsdom@25
+
+      - name: Validar Venta y seis Reportes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check solrak-reports-v0172.js
+          node tests/solrak-reports-v0172-smoke.mjs
+          test "$(grep -o 'solrak-reports-v0172.js?v=1' index.html | wc -l)" -eq 1
+          if grep -qi 'Recargas y Servicios' solrak-reports-v0172.js; then exit 1; fi
+
+      - name: Regresiones POS y facturación
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node tests/solrak-pos-operations-v0171-contract.mjs
+          node tests/pos-module-smoke.mjs
+          node tests/solrak-redesign-v0170-smoke.mjs
+          node tests/quote-email-ui-smoke.mjs
