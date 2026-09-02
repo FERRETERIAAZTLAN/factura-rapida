@@ -1,0 +1,79 @@
+name: SOLRAK v0.1.75 tickets en espera safe
+
+on:
+  push:
+    branches:
+      - feature/v0.1.75-tickets-espera-8
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v0.1.75-tickets-espera-8
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Dependencia de pruebas
+        run: npm install --no-save jsdom@26.1.0
+
+      - name: Smoke v0.1.75 tickets en espera
+        run: node tests/solrak-held-tickets-v0175-smoke.mjs
+
+      - name: Regresion captura cantidad por codigo
+        run: node tests/solrak-sales-v0174-smoke.mjs
+
+      - name: Regresiones POS Venta Reportes Tickets Caja
+        run: |
+          node tests/solrak-flow-v0173-smoke.mjs
+          node tests/solrak-reports-v0172-smoke.mjs
+          node tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node tests/solrak-pos-operations-v0171-contract.mjs
+          node tests/pos-module-smoke.mjs
+          node tests/solrak-redesign-v0170-smoke.mjs
+          node tests/solrak-sumapro-tickets-v0169-smoke.mjs
+
+      - name: Guardas de alcance y seguridad local
+        run: |
+          ! grep -Eqi 'cfdi-api|finkok|recargas y servicios' solrak-held-tickets-v0175.js
+          grep -q 'MAX_TICKETS = 8' solrak-held-tickets-v0175.js
+          grep -q 'localStorage.setItem' solrak-held-tickets-v0175.js
+          grep -q 'slice(0, MAX_TICKETS)' solrak-held-tickets-v0175.js
+          ! grep -Eqi 'session\.token|pin_hash|password' solrak-held-tickets-v0175.js
+
+      - name: Integrar modulo v0.1.75 en index
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          tag = '<script src="solrak-held-tickets-v0175.js"></script>'
+          if tag not in s:
+              if '</body>' not in s:
+                  raise SystemExit('index.html no contiene </body>')
+              s = s.replace('</body>', tag + '\n</body>', 1)
+              p.write_text(s, encoding='utf-8')
+          PY
+          grep -q '<script src="solrak-held-tickets-v0175.js"></script>' index.html
+
+      - name: Persistir integracion en la rama
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'Integracion ya presente.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'chore: integrar tickets en espera v0.1.75 en index'
+          git push origin HEAD:feature/v0.1.75-tickets-espera-8
