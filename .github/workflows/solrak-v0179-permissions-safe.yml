@@ -1,0 +1,84 @@
+name: SOLRAK v0.1.79 usuarios y permisos safe
+
+on:
+  push:
+    branches:
+      - feature/v0.1.79-usuarios-permisos
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v0.1.79-usuarios-permisos
+          fetch-depth: 0
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Dependencia de pruebas
+        run: npm install --no-save jsdom@26.1.0
+
+      - name: Smoke v0.1.79 permisos
+        run: node tests/solrak-permissions-v0179-smoke.mjs
+
+      - name: Regresiones POS recientes
+        run: |
+          node tests/solrak-price-verifier-v0177-smoke.mjs
+          node tests/solrak-held-tickets-v0176-smoke.mjs
+          node tests/solrak-inventory-v0175-smoke.mjs
+          node tests/solrak-sales-v0174-smoke.mjs
+          node tests/solrak-flow-v0173-smoke.mjs
+          node tests/solrak-reports-v0172-smoke.mjs
+          node tests/solrak-sumapro-fiel-v0171-smoke.mjs
+          node tests/solrak-pos-operations-v0171-contract.mjs
+          node tests/pos-module-smoke.mjs
+
+      - name: Guardas de alcance
+        run: |
+          ! grep -Eqi 'cfdi-api|finkok|recargas' solrak-permissions-v0179.js
+          ! grep -Eqi 'cfdi-api|finkok|recargas' supabase/functions/permissions-api/index.ts
+          grep -q 'Empleado · acceso según permisos' solrak-permissions-v0179.js
+          grep -q 'allow_discounts' solrak-permissions-v0179.js
+          grep -q 'allow_price_changes' solrak-permissions-v0179.js
+          grep -q 'allow_wholesale' solrak-permissions-v0179.js
+          grep -q 'allow_inventory_entry' solrak-permissions-v0179.js
+          grep -q 'solrak-inventory-v0175.js' index.html
+          grep -q 'solrak-held-tickets-v0176.js' index.html
+          grep -q 'solrak-price-verifier-v0177.js' index.html
+
+      - name: Integrar módulo v0.1.79 en index
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          tag = '<script src="solrak-permissions-v0179.js"></script>'
+          if tag not in s:
+              if '</body>' not in s:
+                  raise SystemExit('index.html no contiene </body>')
+              s = s.replace('</body>', tag + '\n</body>', 1)
+              p.write_text(s, encoding='utf-8')
+          PY
+          grep -q '<script src="solrak-permissions-v0179.js"></script>' index.html
+
+      - name: Persistir integración en la rama
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'Integración ya presente.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'chore: integrar permisos v0.1.79 en index'
+          git push origin HEAD:feature/v0.1.79-usuarios-permisos
