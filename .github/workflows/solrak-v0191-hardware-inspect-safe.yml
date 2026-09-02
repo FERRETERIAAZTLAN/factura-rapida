@@ -1,0 +1,42 @@
+name: SOLRAK v0.1.91 Hardware base inspect
+
+on:
+  push:
+    branches:
+      - feature/v0.1.91-windows-hardware-bridge
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect-native-base:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v0.1.91-windows-hardware-bridge
+          fetch-depth: 0
+      - name: Extraer base Tauri real
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Remove-Item desktop-base -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip desktop-base -Force
+          foreach($p in @('desktop-base/desktop/src-tauri/src/main.rs','desktop-base/desktop/src-tauri/Cargo.toml','desktop-base/desktop/src-tauri/tauri.conf.json','desktop-base/desktop/package.json')){if(-not(Test-Path $p)){throw "Falta $p"}}
+          New-Item -ItemType Directory -Force desktop-native-v0191/base | Out-Null
+          Copy-Item desktop-base/desktop/src-tauri/src/main.rs desktop-native-v0191/base/main.rs -Force
+          Copy-Item desktop-base/desktop/src-tauri/Cargo.toml desktop-native-v0191/base/Cargo.toml -Force
+          Copy-Item desktop-base/desktop/src-tauri/tauri.conf.json desktop-native-v0191/base/tauri.conf.json -Force
+          Copy-Item desktop-base/desktop/package.json desktop-native-v0191/base/package.json -Force
+      - name: Registrar fuente inspeccionada
+        shell: pwsh
+        run: |
+          if(git status --porcelain desktop-native-v0191/base){
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add desktop-native-v0191/base
+            git commit -m 'chore: capturar base Tauri real para hardware v0.1.91'
+            git push origin HEAD:feature/v0.1.91-windows-hardware-bridge
+          }
