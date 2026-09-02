@@ -1,5 +1,6 @@
 import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import vm from 'node:vm';
 
 const root = process.cwd();
 const desktop = resolve(process.argv[2] || 'desktop');
@@ -9,8 +10,11 @@ const cargoPath = resolve(desktop, 'src-tauri', 'Cargo.toml');
 const mainPath = resolve(src, 'main.rs');
 const indexPath = resolve(dist, 'index.html');
 const ticketsPath = resolve(dist, 'solrak-sumapro-tickets-v0169.js');
+const uiOperativaPath = resolve(dist, 'solrak-ui-operativa-v0183.js');
+const shiftsPath = resolve(dist, 'solrak-shifts-v0189.js');
 
 await copyFile(resolve(root, 'solrak-hardware-v0194.js'), resolve(dist, 'solrak-hardware-v0194.js'));
+await copyFile(resolve(root, 'solrak-suma-sales-v0195.js'), resolve(dist, 'solrak-suma-sales-v0195.js'));
 await copyFile(resolve(root, 'desktop-native-v0194', 'solrak_hardware_v0194.rs'), resolve(src, 'solrak_hardware_v0194.rs'));
 await copyFile(resolve(root, 'desktop-native-v0194', 'solrak_raw_print_helper_v0194.cs'), resolve(src, 'solrak_raw_print_helper_v0194.cs'));
 
@@ -51,9 +55,14 @@ await writeFile(mainPath, main, 'utf8');
 
 let index = await readFile(indexPath, 'utf8');
 const scriptTag = '<script src="solrak-hardware-v0194.js"></script>';
+const salesScriptTag = '<script src="solrak-suma-sales-v0195.js"></script>';
 if (!index.includes(scriptTag)) {
   if (!index.includes('</body>')) throw new Error('dist/index.html: no se encontró </body>');
   index = index.replace('</body>', `${scriptTag}\n</body>`);
+}
+if (!index.includes(salesScriptTag)) {
+  if (!index.includes('</body>')) throw new Error('dist/index.html: no se encontró </body> para UI v0.1.95');
+  index = index.replace('</body>', `${salesScriptTag}\n</body>`);
 }
 await writeFile(indexPath, index, 'utf8');
 
@@ -67,13 +76,63 @@ if (!tickets.includes(directMarker)) {
 }
 await writeFile(ticketsPath, tickets, 'utf8');
 
+// WebView2: impedir que el observador global de v0.1.83 observe las mutaciones que su propio sync() produce.
+// Se conserva la observación de cambios reales del POS; solo se suspende durante cada sincronización.
+let uiOperativa = await readFile(uiOperativaPath, 'utf8');
+const startupGuardMarker = 'syncObserver?.disconnect();';
+if (!uiOperativa.includes(startupGuardMarker)) {
+  const stateRe = /let\s+syncQueued\s*=\s*false\s*;/;
+  if (!stateRe.test(uiOperativa)) throw new Error('UI v0.1.83: no se encontró estado de sincronización');
+  uiOperativa = uiOperativa.replace(
+    stateRe,
+    (match) => `${match}\n  let syncObserver = null;\n  const SYNC_OBSERVER_OPTIONS = { childList: true, subtree: true, characterData: true };`
+  );
+
+  const timerRe = /setTimeout\(\s*\(\)\s*=>\s*\{\s*syncQueued\s*=\s*false\s*;\s*sync\(\)\s*;\s*\}\s*,\s*15\s*\)\s*;/;
+  if (!timerRe.test(uiOperativa)) throw new Error('UI v0.1.83: no se encontró temporizador de scheduleSync esperado');
+  uiOperativa = uiOperativa.replace(
+    timerRe,
+    `setTimeout(() => {\n      syncQueued = false;\n      syncObserver?.disconnect();\n      try { sync(); }\n      finally {\n        if (syncObserver && document.body?.isConnected) syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS);\n      }\n    }, 15);`
+  );
+
+  const observerRe = /new\s+MutationObserver\(\s*scheduleSync\s*\)\s*\.observe\(\s*document\.body\s*,\s*\{\s*childList\s*:\s*true\s*,\s*subtree\s*:\s*true\s*,\s*characterData\s*:\s*true\s*\}\s*\)\s*;/;
+  if (!observerRe.test(uiOperativa)) throw new Error('UI v0.1.83: no se encontró MutationObserver esperado');
+  uiOperativa = uiOperativa.replace(
+    observerRe,
+    'syncObserver = new MutationObserver(scheduleSync); syncObserver.observe(document.body, SYNC_OBSERVER_OPTIONS);'
+  );
+}
+new vm.Script(uiOperativa, { filename: 'solrak-ui-operativa-v0183.js' });
+await writeFile(uiOperativaPath, uiOperativa, 'utf8');
+
+// WebView2: cortar la realimentación síncrona del MutationObserver de turnos v0.1.89.
+// syncCashDashboard() reescribía innerHTML/textContent aun sin cambios; su propio observador de body
+// volvía a dispararse indefinidamente durante DOMContentLoaded y dejaba readyState en "interactive".
+let shifts = await readFile(shiftsPath, 'utf8');
+const shiftsStartupGuardMarker = 'if(bar.innerHTML!==barMarkup)bar.innerHTML=barMarkup;';
+if (!shifts.includes(shiftsStartupGuardMarker)) {
+  const barNeedle = '    const w=state.report?.window;bar.innerHTML=`<div><strong>Corte automático</strong><div>${w?`Turno #${w.shift_id} · ${esc(w.shift_name)} · ${minuteClock(w.start_minute)}–${minuteClock(w.end_minute)}`:"Calculado por las franjas configuradas; no requiere cierre manual."}</div></div><button id="solrak89OpenAutoCut" type="button">Ver corte del turno</button>`;byId("solrak89OpenAutoCut").onclick=()=>openReport().catch(e=>notify(e.message,true));';
+  const barPatch = '    const w=state.report?.window;const barMarkup=`<div><strong>Corte automático</strong><div>${w?`Turno #${w.shift_id} · ${esc(w.shift_name)} · ${minuteClock(w.start_minute)}–${minuteClock(w.end_minute)}`:"Calculado por las franjas configuradas; no requiere cierre manual."}</div></div><button id="solrak89OpenAutoCut" type="button">Ver corte del turno</button>`;if(bar.innerHTML!==barMarkup)bar.innerHTML=barMarkup;byId("solrak89OpenAutoCut").onclick=()=>openReport().catch(e=>notify(e.message,true));';
+  if (!shifts.includes(barNeedle)) throw new Error('Turnos v0.1.89: no se encontró render de barra automática esperado');
+  shifts = shifts.replace(barNeedle, barPatch);
+
+  const statusNeedle = '    const status=byId("solrakCash85Status");if(status)status.textContent="Corte automático por horario";';
+  const statusPatch = '    const status=byId("solrakCash85Status");if(status&&status.textContent!=="Corte automático por horario")status.textContent="Corte automático por horario";';
+  if (!shifts.includes(statusNeedle)) throw new Error('Turnos v0.1.89: no se encontró texto de estado esperado');
+  shifts = shifts.replace(statusNeedle, statusPatch);
+}
+new vm.Script(shifts, { filename: 'solrak-shifts-v0189.js' });
+await writeFile(shiftsPath, shifts, 'utf8');
+
 for (const [file, markers] of [
   [mainPath, ['HardwareStateV0194', 'print_raw_ticket_v0194', 'scale_read_v0194']],
-  [indexPath, ['solrak-hardware-v0194.js']],
+  [indexPath, ['solrak-hardware-v0194.js', 'solrak-suma-sales-v0195.js']],
   [ticketsPath, [directMarker]],
+  [uiOperativaPath, [startupGuardMarker, 'SYNC_OBSERVER_OPTIONS', 'syncObserver = new MutationObserver(scheduleSync)']],
+  [shiftsPath, [shiftsStartupGuardMarker, 'status&&status.textContent!=="Corte automático por horario"']],
 ]) {
   const text = await readFile(file, 'utf8');
   for (const marker of markers) if (!text.includes(marker)) throw new Error(`${file}: falta ${marker}`);
 }
 
-console.log('APPLY HARDWARE v0.1.94 OK: RAW/ESC-POS, spooler Windows, báscula COM y escáner teclado integrados en paquete nativo.');
+console.log('APPLY HARDWARE v0.1.94 + VENTAS v0.1.95 OK: hardware real y pantalla de ventas SOLRAK tipo escritorio integrada.');

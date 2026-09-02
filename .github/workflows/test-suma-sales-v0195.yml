@@ -1,0 +1,51 @@
+name: SOLRAK - Test pantalla ventas v0.1.95
+
+on:
+  push:
+    branches: [feature/v0.1.95-suma-sales-screen]
+    paths:
+      - 'solrak-suma-sales-v0195.js'
+      - 'tests/solrak-suma-sales-v0195-smoke.mjs'
+      - 'scripts/apply-hardware-v0194.mjs'
+      - '.github/workflows/test-suma-sales-v0195.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  suma-sales-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar JSDOM
+        run: npm install --no-save --no-audit --no-fund --package-lock=false jsdom@26.1.0
+      - name: Sintaxis
+        run: |
+          node --check solrak-suma-sales-v0195.js
+          node --check scripts/apply-hardware-v0194.mjs
+          node --check tests/solrak-suma-sales-v0195-smoke.mjs
+      - name: Smoke funcional de interfaz
+        run: node tests/solrak-suma-sales-v0195-smoke.mjs
+      - name: Contrato de empaquetado Windows
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const s=fs.readFileSync('scripts/apply-hardware-v0194.mjs','utf8');
+          for(const marker of ['solrak-suma-sales-v0195.js','salesScriptTag','copyFile(resolve(root, \'solrak-suma-sales-v0195.js\')']){
+            if(!s.includes(marker)) throw new Error('Falta integración de '+marker);
+          }
+          console.log('SOLRAK_V0195_PACKAGE_CONTRACT_OK');
+          NODE
+      - name: Sin DEMO ni cambios fiscales
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const s=fs.readFileSync('solrak-suma-sales-v0195.js','utf8');
+          if(/\bdemo\b|\bmock\b|simulad[oa]|finkok|cfdi/i.test(s)) throw new Error('Contenido fuera de alcance en UI v0.1.95');
+          console.log('SOLRAK_V0195_SCOPE_OK');
+          NODE
