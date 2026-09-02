@@ -17,7 +17,7 @@ function walk(dir) {
 walk(root);
 
 const findings = [];
-const nativeDialog = /\b(?:window\.)?(alert|confirm|prompt)\s*\(/g;
+const nativeDialog = /\b(?:window\.)?(alert|confirm|prompt)(?:\?\.)?\s*\(/g;
 for (const file of files) {
   const source = fs.readFileSync(file, "utf8");
   const rel = path.relative(root, file).replaceAll("\\", "/");
@@ -25,22 +25,24 @@ for (const file of files) {
   for (let i = 0; i < lines.length; i++) {
     nativeDialog.lastIndex = 0;
     let match;
-    while ((match = nativeDialog.exec(lines[i]))) {
-      findings.push(`${rel}:${i + 1}: diálogo nativo ${match[1]}()`);
-    }
+    while ((match = nativeDialog.exec(lines[i]))) findings.push(`${rel}:${i + 1}: diálogo nativo ${match[1]}()`);
   }
 }
 
 const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
-for (const marker of [
+const pos = fs.readFileSync(path.join(root, "pos-module.js"), "utf8");
+for (const [marker, description] of [
   ["posOpenCash", "control legado de apertura manual de caja"],
   ["posCloseCash", "control legado de cierre manual de caja"],
+  ["posOpenDialog", "diálogo legado de apertura manual de caja"],
+  ["posCloseDialog", "diálogo legado de cierre manual de caja"],
 ]) {
-  if (index.includes(marker[0])) findings.push(`index.html: control visible detectado: ${marker[1]} (${marker[0]})`);
+  if (pos.includes(marker)) findings.push(`pos-module.js: ${description} (${marker})`);
 }
-
-const pos = fs.readFileSync(path.join(root, "pos-module.js"), "utf8");
+if (pos.includes("Abrir caja para cobrar")) findings.push("pos-module.js: el cobro todavía instruye apertura manual de caja");
 if (!pos.includes("const MAX_TICKETS = 8;")) findings.push("pos-module.js: MAX_TICKETS no está fijado en 8");
+if (!fs.readFileSync(path.join(root, "solrak-held-tickets-v0176.js"), "utf8").includes("const MAX_TICKETS = 8;")) findings.push("solrak-held-tickets-v0176.js: MAX_TICKETS no está fijado en 8");
+if (!index.includes('<script src="solrak-ux-hardening-v0192.js"></script>')) findings.push("index.html: no carga el endurecimiento UX v0.1.92");
 
 console.log(`SOLRAK UX audit v0.1.92 scanned ${files.length} production files`);
 if (findings.length) {
@@ -49,4 +51,4 @@ if (findings.length) {
   console.error("SOLRAK_UX_AUDIT_FINDINGS_END");
   process.exit(1);
 }
-console.log("SOLRAK_UX_AUDIT_V0192_OK nativeDialogs=0 manualShiftControls=0 maxTickets=8");
+console.log("SOLRAK_UX_AUDIT_V0192_OK nativeDialogs=0 manualShiftControls=0 maxTickets=8 hardeningLoaded=1");
