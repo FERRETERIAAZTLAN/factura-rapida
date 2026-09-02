@@ -26,10 +26,13 @@ jobs:
           node --check solrak-sales-suma-v0201.js
           node --check solrak-sales-suma-v0201-tune.js
           node --check solrak-sales-suma-v0201-startup-fix.js
+          node --check solrak-sales-suma-v0201-loader.js
           node --check scripts/apply-sales-suma-v0201.mjs
           node --check tests/solrak-sales-suma-v0201-startup-safe.mjs
+          node --check tests/solrak-sales-suma-v0201-load-gate.mjs
           node tests/solrak-sales-suma-v0201-startup-safe.mjs
-          echo 'SOLRAK_V0201_STARTUP_FIX_VALIDATED'
+          node tests/solrak-sales-suma-v0201-load-gate.mjs
+          echo 'SOLRAK_V0201_LOAD_GATE_VALIDATED'
       - name: Relanzar release Windows completa
         env:
           GH_TOKEN: ${{ github.token }}
