@@ -1,0 +1,30 @@
+name: Restore exact working v0.1.49 as Latest
+
+on:
+  push:
+    branches: [restore-v0149-latest]
+    paths:
+      - '.github/workflows/restore-v0149-latest.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore-latest:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Restore v0.1.49 as Latest
+        run: |
+          set -euo pipefail
+          repo='${{ github.repository }}'
+          gh release view v0.1.49 --repo "$repo" --json tagName,isDraft,isPrerelease,assets > release.json
+          test "$(jq -r .tagName release.json)" = 'v0.1.49'
+          test "$(jq -r .isDraft release.json)" = 'false'
+          test "$(jq -r .isPrerelease release.json)" = 'false'
+          jq -e '.assets[] | select(.name=="Factura.Rapida_0.1.49_x64-setup.exe")' release.json >/dev/null
+          gh release edit v0.1.49 --repo "$repo" --latest
+          latest="$(gh api "/repos/$repo/releases/latest" --jq .tag_name)"
+          test "$latest" = 'v0.1.49'
+          echo 'RESTORE_EXACT_WORKING_V0149_LATEST_OK'
