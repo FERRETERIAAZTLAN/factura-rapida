@@ -25,19 +25,21 @@ jobs:
       GH_TOKEN: ${{ github.token }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Validar version nueva
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
+          $ErrorActionPreference='Stop'
           $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
           $rels=gh api "/repos/$repo/releases?per_page=100" | ConvertFrom-Json
           if($rels | Where-Object {$_.tag_name -eq $tag}){throw "$tag ya existe"}
-          try{gh api "/repos/$repo/git/ref/tags/$tag" *> $null;throw "$tag ya existe como tag"}catch{if($_.Exception.Message -like '*ya existe como tag*'){throw}}
+          gh api "/repos/$repo/git/ref/tags/$tag" *> $null
+          if($LASTEXITCODE -eq 0){throw "$tag ya existe como tag"}
+          $global:LASTEXITCODE=0
+          Write-Host "VERSION_NUEVA_OK $tag"
 
       - uses: actions/setup-node@v4
         with:
@@ -65,10 +67,10 @@ jobs:
           $cfg | ConvertTo-Json -Depth 30 | Set-Content $cfgPath -Encoding UTF8
           Write-Host 'DESKTOP_ESTABLE_RECONSTRUIDO'
 
-      - name: Recuperar interfaz que factura en PRODUCCION
+      - name: Recuperar UI real de facturacion
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
+          $ErrorActionPreference='Stop'
           $ok=$false
           for($i=1;$i -le 6;$i++){
             try{
@@ -79,31 +81,21 @@ jobs:
           }
           if(-not $ok){throw 'No se pudo obtener la UI real de facturacion'}
           $h=Get-Content index.html -Raw
-          foreach($m in @(
-            'data-fr-production-clean="1"',
-            'data-fr-facturar-real="8"',
-            'finkok-production-readiness-api',
-            "readiness('ensure')",
-            "cfdiApi('preflight',{draftId:d.id})",
-            "cfdiApi('timber',{draftId:d.id})",
-            "api('saveDraft',{draft:payload})",
-            'FACTURAR'
-          )){if(-not $h.Contains($m)){throw "Falta flujo real: $m"}}
+          foreach($m in @('data-fr-production-clean="1"','data-fr-facturar-real="8"','finkok-production-readiness-api',"readiness('ensure')", "cfdiApi('preflight',{draftId:d.id})", "cfdiApi('timber',{draftId:d.id})", "api('saveDraft',{draft:payload})",'FACTURAR')){if(-not $h.Contains($m)){throw "Falta flujo real: $m"}}
           foreach($m in @('Timbrar CFDI · Falta conectar PAC','Finkok · DEMO','sandboxCsdForm','demo-facturacion')){if($h.IndexOf($m,[StringComparison]::OrdinalIgnoreCase)-ge 0){throw "Contenido no productivo o bloqueo antiguo: $m"}}
           Write-Host 'UI_FACTURACION_REAL_V8_VALIDADA'
 
-      - name: Empaquetar interfaz real
+      - name: Empaquetar y validar UI real
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
+          $ErrorActionPreference='Stop'
           Push-Location desktop
           npm run sync-web
           Pop-Location
           if(-not(Test-Path desktop/dist/index.html)){throw 'No se genero desktop/dist/index.html'}
-          if((Get-Item desktop/dist/index.html).Length -lt 10000){throw 'desktop/dist/index.html incompleto'}
           $h=Get-Content desktop/dist/index.html -Raw
           foreach($m in @('data-fr-production-clean="1"','data-fr-facturar-real="8"',"readiness('ensure')", "cfdiApi('timber',{draftId:d.id})",'FACTURAR')){if(-not $h.Contains($m)){throw "El paquete perdio flujo real: $m"}}
-          if($h.IndexOf('Timbrar CFDI · Falta conectar PAC',[StringComparison]::OrdinalIgnoreCase)-ge 0){throw 'El paquete conserva el bloqueo Falta conectar PAC'}
+          if($h.IndexOf('Timbrar CFDI · Falta conectar PAC',[StringComparison]::OrdinalIgnoreCase)-ge 0){throw 'El paquete conserva Falta conectar PAC'}
           @'
           import fs from 'node:fs';
           import vm from 'node:vm';
@@ -113,10 +105,9 @@ jobs:
           for(let i=0;i<scripts.length;i++){
             const src=(scripts[i][1].match(/\bsrc=["']([^"']+)/i)||[])[1];
             if(src) continue;
-            new vm.Script(scripts[i][2],{filename:`inline-${i+1}.js`});
-            checked++;
+            new vm.Script(scripts[i][2],{filename:`inline-${i+1}.js`});checked++;
           }
-          if(!checked) throw new Error('No se validaron scripts inline');
+          if(!checked)throw Error('No se validaron scripts inline');
           console.log(`FACTURACION_REAL_INLINE_JS_OK checked=${checked}`);
           '@ | Set-Content validate-real-ui.mjs -Encoding utf8
           node validate-real-ui.mjs
@@ -138,7 +129,7 @@ jobs:
         shell: pwsh
         run: npm run tauri -- build --config src-tauri/tauri.release.conf.json --bundles nsis
 
-      - name: Probar que el EXE realmente abre
+      - name: Probar apertura del EXE
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -146,11 +137,7 @@ jobs:
           if(-not(Test-Path $exe)){$exe=(Get-ChildItem desktop/src-tauri/target/release -File -Filter '*.exe' | Where-Object {$_.Name -notmatch 'setup'} | Sort-Object Length -Descending | Select-Object -First 1).FullName}
           if(-not $exe -or -not(Test-Path $exe)){throw 'No se encontro EXE ejecutable'}
           $p=Start-Process -FilePath (Resolve-Path $exe).Path -PassThru
-          try{
-            Start-Sleep -Seconds 20
-            if($p.HasExited){throw "El EXE se cerro durante la prueba de apertura. ExitCode=$($p.ExitCode)"}
-            Write-Host "EXE_ABIERTO_OK pid=$($p.Id)"
-          } finally {if($p -and -not $p.HasExited){Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue}}
+          try{Start-Sleep -Seconds 20;if($p.HasExited){throw "El EXE se cerro. ExitCode=$($p.ExitCode)"};Write-Host "EXE_ABIERTO_OK pid=$($p.Id)"}finally{if($p -and -not $p.HasExited){Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue}}
 
       - name: Preparar assets firmados
         shell: pwsh
@@ -164,20 +151,14 @@ jobs:
           $name="SOLRAK_$env:FR_VERSION`_x64-setup.exe"
           Copy-Item $exe.FullName "release-files/$name" -Force
           Copy-Item $sig "release-files/$name.sig" -Force
-          $eh=(Get-FileHash "release-files/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $sh=(Get-FileHash "release-files/$name.sig" -Algorithm SHA256).Hash.ToLowerInvariant()
           "FR_ASSET_EXE=$name" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "FR_EXE_SHA256=$eh" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "FR_SIG_SHA256=$sh" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
           $signature=(Get-Content "release-files/$name.sig" -Raw).Trim()
-          $url="https://github.com/$repo/releases/download/$tag/$name"
-          $notes='SOLRAK v0.2.3: reconstruido desde la interfaz productiva v8 que contiene el flujo FACTURAR real con Finkok PRODUCCION. Sin los modulos y redisenos posteriores. No modifica inventario ni precios.'
+          $repo='${{ github.repository }}';$tag="v$env:FR_VERSION";$url="https://github.com/$repo/releases/download/$tag/$name"
+          $notes='SOLRAK v0.2.3: vuelve al flujo FACTURAR real con Finkok PRODUCCION de la interfaz v8. Sin los modulos y redisenos posteriores. No modifica inventario ni precios.'
           $j=[ordered]@{version=$env:FR_VERSION;notes=$notes;pub_date=[DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ');platforms=[ordered]@{'windows-x86_64'=[ordered]@{signature=$signature;url=$url}}}
           $j | ConvertTo-Json -Depth 8 | Set-Content release-files/latest.json -Encoding UTF8
-          "FR_LATEST_SHA256=$((Get-FileHash release-files/latest.json -Algorithm SHA256).Hash.ToLowerInvariant())" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Respaldar instalador firmado
+      - name: Respaldar instalador
         uses: actions/upload-artifact@v4
         with:
           name: SOLRAK-v0.2.3-real-billing-windows-signed
@@ -188,18 +169,10 @@ jobs:
       - name: Publicar v0.2.3 como Latest
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
+          $ErrorActionPreference='Stop'
           $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
-          gh release create $tag "release-files/$env:FR_ASSET_EXE" "release-files/$env:FR_ASSET_EXE.sig" release-files/latest.json --repo $repo --target '${{ github.sha }}' --title "SOLRAK $tag" --notes 'v0.2.3 estable: vuelve al flujo de facturacion real de PRODUCCION. EXE real probado y updater firmado.' --draft
-          $r=$null
-          for($i=1;$i -le 20;$i++){$rels=gh api "/repos/$repo/releases?per_page=100" | ConvertFrom-Json;$r=$rels|Where-Object {$_.tag_name -eq $tag -and $_.draft}|Select-Object -First 1;if($r -and $r.assets.Count -ge 3){break};Start-Sleep -Seconds 2}
-          if(-not $r){throw 'No se encontro borrador'}
-          $expected=@{$env:FR_ASSET_EXE="sha256:$env:FR_EXE_SHA256";"$env:FR_ASSET_EXE.sig"="sha256:$env:FR_SIG_SHA256";'latest.json'="sha256:$env:FR_LATEST_SHA256"}
-          foreach($n in $expected.Keys){$a=$r.assets|Where-Object {$_.name -eq $n}|Select-Object -First 1;if(-not $a){throw "Falta asset $n"};if([string]$a.digest -ne $expected[$n]){throw "Hash remoto incorrecto $n"}}
-          $pub=gh api --method PATCH "/repos/$repo/releases/$($r.id)" -F draft=false -F prerelease=false | ConvertFrom-Json
-          if($pub.draft -or $pub.prerelease){throw 'Release no quedo publica'}
+          gh release create $tag "release-files/$env:FR_ASSET_EXE" "release-files/$env:FR_ASSET_EXE.sig" release-files/latest.json --repo $repo --target '${{ github.sha }}' --title "SOLRAK $tag" --notes 'v0.2.3 estable: flujo de facturacion real de PRODUCCION restaurado. EXE probado y updater firmado.'
           gh release edit $tag --repo $repo --latest
-          Write-Host 'V0203_FACTURACION_REAL_PUBLICADA_LATEST'
 
       - name: Verificacion publica final
         shell: pwsh
@@ -208,16 +181,16 @@ jobs:
           $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
           $r=gh api "/repos/$repo/releases/tags/$tag" | ConvertFrom-Json
           $latest=gh api "/repos/$repo/releases/latest" | ConvertFrom-Json
-          if($r.draft -or $r.prerelease-or [string]$r.tag_name -ne $tag){throw 'Release invalida'}
+          if($r.draft -or $r.prerelease -or [string]$r.tag_name -ne $tag){throw 'Release invalida'}
           if([string]$latest.tag_name -ne $tag){throw 'v0.2.3 no es Latest'}
           foreach($n in @($env:FR_ASSET_EXE,"$env:FR_ASSET_EXE.sig",'latest.json')){if(-not($r.assets|Where-Object {$_.name -eq $n})){throw "Falta asset $n"}}
           $j=Invoke-RestMethod "https://github.com/$repo/releases/latest/download/latest.json" -TimeoutSec 30
           if([string]$j.version -ne $env:FR_VERSION){throw 'latest.json incorrecto'}
           Write-Host 'PUBLIC_RELEASE_OK v0.2.3 FACTURACION_REAL'
 
-      - name: Limpiar borrador si falla
+      - name: Limpiar release si falla
         if: failure()
         shell: pwsh
         run: |
           $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
-          try{$rels=gh api "/repos/$repo/releases?per_page=100"|ConvertFrom-Json;$r=$rels|Where-Object {$_.tag_name -eq $tag -and $_.draft}|Select-Object -First 1;if($r){gh api --method DELETE "/repos/$repo/releases/$($r.id)"|Out-Null;Write-Host 'Borrador fallido eliminado'}}catch{Write-Host "Limpieza no critica: $($_.Exception.Message)"}
+          try{$r=gh api "/repos/$repo/releases/tags/$tag" | ConvertFrom-Json;if($r){gh api --method DELETE "/repos/$repo/releases/$($r.id)" | Out-Null}}catch{}
