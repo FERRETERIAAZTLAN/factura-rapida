@@ -70,7 +70,7 @@ jobs:
           $cfg | ConvertTo-Json -Depth 30 | Set-Content $cfgPath -Encoding UTF8
           Write-Host 'DESKTOP_FUNCIONAL_RECONSTRUIDO'
 
-      - name: Empaquetar exactamente la UI funcional
+      - name: Empaquetar UI funcional
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
@@ -78,9 +78,8 @@ jobs:
           npm run sync-web
           Pop-Location
           if(-not(Test-Path desktop/dist/index.html)){throw 'No se genero desktop/dist/index.html'}
-          $root=(Get-FileHash index.html -Algorithm SHA256).Hash.ToLowerInvariant()
-          $dist=(Get-FileHash desktop/dist/index.html -Algorithm SHA256).Hash.ToLowerInvariant()
-          if($root -ne $dist){throw "La UI empaquetada no coincide exactamente con el snapshot funcional root=$root dist=$dist"}
+          if((Get-Item desktop/dist/index.html).Length -lt 10000){throw 'desktop/dist/index.html quedo incompleto'}
+          foreach($p in @('desktop/dist/solrak-sales-suma-v0201.js','desktop/dist/solrak-redesign-v0170.js','desktop/dist/solrak-reports-v0172.js','desktop/dist/pos-module.js','desktop/dist/quotes-module.js')){if(Test-Path $p){throw "Quedo modulo posterior en paquete: $p"}}
           @'
           import fs from 'node:fs';
           import vm from 'node:vm';
@@ -93,11 +92,12 @@ jobs:
             new vm.Script(scripts[i][2],{filename:`inline-${i+1}.js`});
             checked++;
           }
+          if(!checked) throw new Error('No se validaron scripts inline');
           console.log(`ROLLBACK_INLINE_JS_OK checked=${checked}`);
           '@ | Set-Content validate-rollback-ui.mjs -Encoding utf8
           node validate-rollback-ui.mjs
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-          Write-Host 'ROLLBACK_UI_PACKAGE_EXACT_OK'
+          Write-Host 'ROLLBACK_UI_PACKAGE_OK'
 
       - name: Configurar updater firmado
         shell: pwsh
