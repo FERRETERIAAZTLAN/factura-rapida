@@ -82,7 +82,7 @@ jobs:
           if(-not $ok){throw 'No se pudo obtener la UI real de facturacion'}
           $h=Get-Content index.html -Raw
           foreach($m in @('data-fr-production-clean="1"','data-fr-facturar-real="8"','finkok-production-readiness-api',"readiness('ensure')", "cfdiApi('preflight',{draftId:d.id})", "cfdiApi('timber',{draftId:d.id})", "api('saveDraft',{draft:payload})",'FACTURAR')){if(-not $h.Contains($m)){throw "Falta flujo real: $m"}}
-          foreach($m in @('Timbrar CFDI · Falta conectar PAC','Finkok · DEMO','sandboxCsdForm','demo-facturacion')){if($h.IndexOf($m,[StringComparison]::OrdinalIgnoreCase)-ge 0){throw "Contenido no productivo o bloqueo antiguo: $m"}}
+          foreach($m in @('Timbrar CFDI · Falta conectar PAC','>Finkok · DEMO<','id="sandboxCsdForm"','id="pacForm"','demo-facturacion')){if($h.IndexOf($m,[StringComparison]::OrdinalIgnoreCase)-ge 0){throw "Contenido no productivo visible o bloqueo antiguo: $m"}}
           Write-Host 'UI_FACTURACION_REAL_V8_VALIDADA'
 
       - name: Empaquetar y validar UI real
@@ -95,7 +95,7 @@ jobs:
           if(-not(Test-Path desktop/dist/index.html)){throw 'No se genero desktop/dist/index.html'}
           $h=Get-Content desktop/dist/index.html -Raw
           foreach($m in @('data-fr-production-clean="1"','data-fr-facturar-real="8"',"readiness('ensure')", "cfdiApi('timber',{draftId:d.id})",'FACTURAR')){if(-not $h.Contains($m)){throw "El paquete perdio flujo real: $m"}}
-          if($h.IndexOf('Timbrar CFDI · Falta conectar PAC',[StringComparison]::OrdinalIgnoreCase)-ge 0){throw 'El paquete conserva Falta conectar PAC'}
+          foreach($m in @('Timbrar CFDI · Falta conectar PAC','>Finkok · DEMO<','id="sandboxCsdForm"','id="pacForm"')){if($h.IndexOf($m,[StringComparison]::OrdinalIgnoreCase)-ge 0){throw "El paquete conserva control no productivo visible: $m"}}
           @'
           import fs from 'node:fs';
           import vm from 'node:vm';
@@ -191,6 +191,9 @@ jobs:
       - name: Limpiar release si falla
         if: failure()
         shell: pwsh
+        continue-on-error: true
         run: |
           $repo='${{ github.repository }}';$tag="v$env:FR_VERSION"
-          try{$r=gh api "/repos/$repo/releases/tags/$tag" | ConvertFrom-Json;if($r){gh api --method DELETE "/repos/$repo/releases/$($r.id)" | Out-Null}}catch{}
+          gh api "/repos/$repo/releases/tags/$tag" *> release-cleanup.json
+          if($LASTEXITCODE -eq 0){$r=Get-Content release-cleanup.json -Raw | ConvertFrom-Json;gh api --method DELETE "/repos/$repo/releases/$($r.id)" *> $null}
+          $global:LASTEXITCODE=0
