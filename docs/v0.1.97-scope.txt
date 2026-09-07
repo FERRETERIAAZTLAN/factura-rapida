@@ -1,3 +1,0 @@
-SOLRAK v0.1.97
-Alcance: interfaz y lectura del reporte Detalle de Ventas.
-No modifica inventario, precios, existencias, CFDI/Finkok ni Supabase.
