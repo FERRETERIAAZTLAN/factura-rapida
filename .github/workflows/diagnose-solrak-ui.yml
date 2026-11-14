@@ -1,0 +1,65 @@
+name: Diagnosticar pantalla blanca SOLRAK (sin publicar)
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/diagnose-solrak-ui.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-ui:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Descargar la misma interfaz de SOLRAK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15' -OutFile index.html -UseBasicParsing -TimeoutSec 60
+          $h=Get-Content index.html -Raw
+          if($h.Length -lt 30000 -or -not $h.Contains('data-fr-sat-tools="1"')){throw 'La interfaz servida no corresponde a la version esperada'}
+          Write-Host "HTML local OK length=$($h.Length)"
+          New-Item -ItemType Directory -Force diag | Out-Null
+          [ordered]@{html_length=$h.Length;ui_marker_sat=$h.Contains('data-fr-sat-tools="1"');ui_marker_autosync=$h.Contains('data-fr-sat-autosync="1"');timestamp=[DateTime]::UtcNow.ToString('s')} | ConvertTo-Json | Set-Content diag/metadata.json
+      - name: Probar renderizado real con Chrome, sin iniciar sesion
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          $chrome='C:\Program Files\Google\Chrome\Application\chrome.exe'
+          if(-not(Test-Path $chrome)){$chrome='C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'}
+          if(-not(Test-Path $chrome)){Write-Host 'Chrome no disponible';exit 0}
+          $url='file:///'+((Resolve-Path index.html).Path -replace '\\','/')
+          $args=@('--headless=new','--no-first-run','--no-default-browser-check','--disable-gpu','--hide-scrollbars','--window-size=1440,900','--virtual-time-budget=7000',"--screenshot=$((Resolve-Path diag).Path)\chrome.png",$url)
+          & $chrome @args 2>&1 | Out-String | Set-Content diag/chrome.log
+          $dump=@('--headless=new','--no-first-run','--no-default-browser-check','--disable-gpu','--virtual-time-budget=7000','--dump-dom',$url)
+          & $chrome @dump 2>&1 | Out-String | Set-Content diag/dom.txt
+          if(Test-Path diag/chrome.png){Write-Host "SCREENSHOT_SIZE=$((Get-Item diag/chrome.png).Length)"}
+          if(Test-Path diag/dom.txt){Write-Host "DOM_RESULT_SIZE=$((Get-Item diag/dom.txt).Length)"}
+      - name: Validar archivos de arranque del proyecto original
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Expand-Archive 'Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip' diag/base -Force
+          Get-ChildItem diag/base -Recurse -File | Where-Object {$_.Name -match 'main.rs|lib.rs|tauri.conf.json|sync-web.mjs|index.html'} | ForEach-Object {Write-Host "SOURCE_FILE=$($_.FullName.Replace($PWD.Path,''))"}
+          $files=Get-ChildItem diag/base -Recurse -File | Where-Object {$_.Name -match 'main.rs|lib.rs|sync-web.mjs|tauri.conf.json'}
+          foreach($file in $files){
+            $txt=Get-Content $file.FullName -Raw
+            $matches=[regex]::Matches($txt,'[A-Za-z_]+\s*\([^\r\n]{0,80}(navigate|eval|index.html|devtools|url|window)[^\r\n]{0,120}')
+            foreach($m in $matches){Write-Host ("BOOTSTRAP_MATCH {0}: {1}" -f $file.Name,$m.Value)}
+          }
+      - name: Guardar captura de diagnóstico, sin modificar facturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: solrak-ui-diagnostic
+          path: |
+            diag/metadata.json
+            diag/chrome.png
+            diag/chrome.log
+            diag/dom.txt
+          if-no-files-found: warn
+          retention-days: 3
