@@ -686,5 +686,59 @@ if(checkBtn)checkBtn.onclick=async()=>{msg.classList.remove('hidden');busy(true)
  function init(){const el=document.getElementById('invoiceList');if(!el)return;new MutationObserver(apply).observe(el,{childList:true});apply()}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
-</script></body>
+</script>
+<style data-fr-sat-autosync="1">
+.frSatAutoStatus{font-size:12px;color:var(--muted);margin:9px 0;line-height:1.4}
+</style>
+<script data-fr-sat-autosync="1">
+(function(){
+ const ENDPOINT='https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/cfdi-auto-sync-api';
+ let startedFor='',controller=null;
+ function status(text){
+  const list=document.getElementById('invoiceList');if(!list)return;
+  let el=document.getElementById('frSatAutoStatus');
+  if(!el){el=document.createElement('div');el.id='frSatAutoStatus';el.className='frSatAutoStatus';list.parentNode.insertBefore(el,list)}
+  el.textContent=text;
+ }
+ async function run(token,businessId){
+  if(!token||!businessId)return;
+  status('SAT: revisando cancelaciones en segundo plano. Puedes seguir facturando.');
+  controller=new AbortController();
+  const timer=setTimeout(()=>controller?.abort(),115000);
+  try{
+   const headers={'Authorization':'Bearer '+ANON_KEY,'apikey':ANON_KEY,'Content-Type':'application/json','x-session-token':token};
+   const response=await fetch(ENDPOINT,{method:'POST',headers,body:JSON.stringify({action:'sync'}),signal:controller.signal});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw Error(data.error||'SAT no disponible');
+   if(session?.token!==token||session?.business?.id!==businessId)return;
+   if(data.skipped){status('SAT: verificación automática no disponible. Las facturas conservan su estado.');return}
+   const changed=Array.isArray(data.cancelledIds)?data.cancelledIds:[];
+   if(changed.length){
+    for(const invoice of invoices){if(changed.includes(invoice.id))invoice.status='cancelled'}
+    renderHistory();
+    notice('SAT: '+changed.length+' factura(s) cancelada(s) detectada(s). El historial se actualizó.');
+   }
+   status('SAT: '+Number(data.checked||0)+' factura(s) verificadas; '+changed.length+' nueva(s) cancelada(s).'+(data.failed?' '+Number(data.failed)+' sin verificar (sin cambios).':''));
+  }catch(e){
+   if(session?.token===token)status('SAT: no se completó la consulta automática. La facturación sigue funcionando; puedes consultar manualmente.');
+   console.warn('Sincronización SAT omitida; no afecta facturación',e?.message||e);
+  }finally{clearTimeout(timer);controller=null}
+ }
+ function watchLogin(){
+  const auth=document.getElementById('authLayer');if(!auth)return;
+  function tryStart(){
+   const token=session?.token||'',businessId=session?.business?.id||'';
+   if(!token||!businessId||!auth.classList.contains('hidden'))return;
+   const key=token+'|'+businessId;
+   if(startedFor===key)return;
+   startedFor=key;
+   setTimeout(()=>{if(session?.token===token&&session?.business?.id===businessId)run(token,businessId)},1200);
+  }
+  new MutationObserver(tryStart).observe(auth,{attributes:true,attributeFilter:['class']});
+  tryStart();
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',watchLogin);else watchLogin();
+})();
+</script>
+</body>
 </html>
