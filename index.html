@@ -636,5 +636,55 @@ if(checkBtn)checkBtn.onclick=async()=>{msg.classList.remove('hidden');busy(true)
  const oldHistory=renderHistory;renderHistory=function(){oldHistory();setTimeout(addPrintButtons,0)};setTimeout(addPrintButtons,1200);
  window.FacturaRapidaDesktop={bridgeVersion:1,isNative:!!window.__TAURI_INTERNALS__,focusProduct,focusClient,printInvoice,shortcuts:{F2:'producto',F3:'cliente',F8:'guardar borrador','Alt+1':'factura','Alt+2':'clientes','Alt+3':'productos','Alt+4':'historial'}};document.documentElement.dataset.frDesktopReady='1';
 })();
+</script>
+<style data-fr-sat-tools="1">.frSatActions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.frSatDanger{border-color:#c44!important;color:#a22!important}</style>
+<script data-fr-sat-tools="1">
+(function(){
+ const URL='https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/cfdi-cancel-api';
+ async function apiSat(action,invoiceId,extra={}){
+  const headers={'Authorization':'Bearer '+ANON_KEY,'apikey':ANON_KEY,'Content-Type':'application/json'};
+  if(session?.token)headers['x-session-token']=session.token;
+  const response=await fetch(URL,{method:'POST',headers,body:JSON.stringify({action,invoiceId,...extra})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(data.error||'No se pudo consultar la cancelación');
+  return data;
+ }
+ function showError(e){notice(e?.message||String(e),true)}
+ async function query(id){
+  busy(true);try{const x=await apiSat('check',id);notice(x.cancelled?'El SAT CONFIRMA la cancelación.':'El SAT todavía indica '+x.estado+(x.estatusCancelacion?' · '+x.estatusCancelacion:'')+'.');await loadAll()}catch(e){showError(e)}finally{busy(false)}
+ }
+ async function cancel(id){
+  const i=invoices.find(x=>x.id===id);
+  if(!i||i.status!=='timbered'||!isAdmin())return notice('La factura no puede cancelarse desde esta sesión.',true);
+  const raw=prompt('Motivo SAT:\n01 Errores con relación (requiere CFDI sustituto)\n02 Errores sin relación\n03 Operación no realizada\n04 Operación nominativa en factura global\n\nIndica 01, 02, 03 o 04:','02');
+  if(raw===null)return;
+  const reason=raw.trim();
+  if(!['01','02','03','04'].includes(reason))return notice('Motivo SAT inválido.',true);
+  let replacementUuid='';
+  if(reason==='01'){replacementUuid=prompt('UUID del CFDI sustituto, ya timbrado y relacionado (TipoRelacion 04):','')||'';if(!replacementUuid.trim())return notice('Motivo 01: primero debes timbrar un CFDI sustituto relacionado.',true)}
+  if(!confirm('¿SOLICITAR CANCELACIÓN REAL AL SAT?\nCFDI '+(i.series||'')+(i.folio||'')+'\nUUID: '+i.uuid+'\nMotivo: '+reason+'\n\nLa solicitud puede quedar pendiente. Esta operación no elimina el XML ni el historial.'))return;
+  busy(true);try{const x=await apiSat('request',id,{reason,replacementUuid:replacementUuid.trim().toUpperCase()});notice(x.cancelled?'SAT: CFDI cancelado.':'Solicitud enviada; SAT: '+(x.estado||'pendiente de verificación')+'. Consulta después.');await loadAll()}catch(e){showError(e)}finally{busy(false)}
+ }
+ function correct(id){
+  const i=invoices.find(x=>x.id===id),d=drafts.find(x=>x.id===i?.draft_id);
+  if(!d)return notice('No está cargado el borrador original. La factura se conserva; no se puede copiar automáticamente.',true);
+  if(!confirm('Se copiarán cliente y productos para crear una factura NUEVA. El CFDI original NO será modificado ni cancelado. ¿Continuar?'))return;
+  openDraft(d);notice('Borrador copiado. Revisa los conceptos y guarda una factura nueva; la original sigue vigente.');
+ }
+ function btn(text,handler,danger=false){const b=document.createElement('button');b.type='button';b.className='secondary compact'+(danger?' frSatDanger':'');b.textContent=text;b.onclick=handler;return b}
+ function apply(){
+  document.querySelectorAll('#invoiceList .history-row').forEach((row,index)=>{
+   if(row.querySelector('.frSatActions'))return;
+   const i=invoices[index];if(!i?.uuid)return;
+   const box=document.createElement('div');box.className='frSatActions';
+   box.append(btn('Consultar SAT',()=>query(i.id)));
+   if(i.status==='timbered'&&isAdmin())box.append(btn('Cancelar CFDI',()=>cancel(i.id),true));
+   if(i.status==='timbered')box.append(btn('Corregir y refacturar',()=>correct(i.id)));
+   (row.querySelector('.frDeliveryActions')||row.querySelector('.actions')||row.lastElementChild||row).append(box);
+  });
+ }
+ function init(){const el=document.getElementById('invoiceList');if(!el)return;new MutationObserver(apply).observe(el,{childList:true});apply()}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
 </script></body>
 </html>
