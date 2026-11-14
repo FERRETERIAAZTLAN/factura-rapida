@@ -25,7 +25,7 @@ jobs:
           Write-Host "HTML local OK length=$($h.Length)"
           New-Item -ItemType Directory -Force diag | Out-Null
           [ordered]@{html_length=$h.Length;ui_marker_sat=$h.Contains('data-fr-sat-tools="1"');ui_marker_autosync=$h.Contains('data-fr-sat-autosync="1"');timestamp=[DateTime]::UtcNow.ToString('s')} | ConvertTo-Json | Set-Content diag/metadata.json
-      - name: Probar renderizado real con Chrome, sin iniciar sesion
+      - name: Probar renderizado real con Chrome con tiempo limite estricto
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
@@ -33,12 +33,13 @@ jobs:
           if(-not(Test-Path $chrome)){$chrome='C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'}
           if(-not(Test-Path $chrome)){Write-Host 'Chrome no disponible';exit 0}
           $url='file:///'+((Resolve-Path index.html).Path -replace '\\','/')
-          $args=@('--headless=new','--no-first-run','--no-default-browser-check','--disable-gpu','--hide-scrollbars','--window-size=1440,900','--virtual-time-budget=7000',"--screenshot=$((Resolve-Path diag).Path)\chrome.png",$url)
-          & $chrome @args 2>&1 | Out-String | Set-Content diag/chrome.log
-          $dump=@('--headless=new','--no-first-run','--no-default-browser-check','--disable-gpu','--virtual-time-budget=7000','--dump-dom',$url)
-          & $chrome @dump 2>&1 | Out-String | Set-Content diag/dom.txt
-          if(Test-Path diag/chrome.png){Write-Host "SCREENSHOT_SIZE=$((Get-Item diag/chrome.png).Length)"}
-          if(Test-Path diag/dom.txt){Write-Host "DOM_RESULT_SIZE=$((Get-Item diag/dom.txt).Length)"}
+          $dest=(Resolve-Path diag).Path
+          $p=Start-Process -FilePath $chrome -ArgumentList @('--headless=new','--no-first-run','--no-default-browser-check','--disable-gpu','--disable-background-networking','--hide-scrollbars','--window-size=1440,900','--virtual-time-budget=5000',"--screenshot=$dest\\chrome.png",$url) -PassThru -NoNewWindow
+          if(-not $p.WaitForExit(25000)){Write-Host 'Chrome screen timeout';try{$p.Kill($true)}catch{}}
+          if(Test-Path "$dest\\chrome.png"){Write-Host "SCREENSHOT_SIZE=$((Get-Item "$dest\\chrome.png").Length)"}else{Write-Host "SCREENSHOT_NOT_CREATED"}
+          $p2=Start-Process -FilePath $chrome -ArgumentList @('--headless=new','--no-first-run','--disable-gpu','--disable-background-networking','--virtual-time-budget=5000','--dump-dom',$url) -RedirectStandardOutput "$dest\\dom.txt" -PassThru -NoNewWindow
+          if(-not $p2.WaitForExit(25000)){Write-Host 'Chrome DOM timeout';try{$p2.Kill($true)}catch{}}
+          if(Test-Path "$dest\\dom.txt"){Write-Host "DOM_RESULT_SIZE=$((Get-Item "$dest\\dom.txt").Length)"}
       - name: Validar archivos de arranque del proyecto original
         shell: pwsh
         run: |
