@@ -83,7 +83,7 @@ jobs:
           '@
           $s=$s.Replace('fn main() {',$fn+'fn main() {')
           $old='            install_update'
-          if($s.Split($old).Length -ne 2){throw 'Lista de comandos inesperada'}
+          if([regex]::Matches($s,[regex]::Escape($old)).Count -ne 1){throw 'Lista de comandos inesperada'}
           $s=$s.Replace($old,$old+",`n            report_ui_ready")
           if(-not $s.Contains('UI_READY_VISIBLE') -or -not $s.Contains('report_ui_ready')){throw 'No quedo instrumento seguro'}
           Set-Content $path $s -Encoding utf8
