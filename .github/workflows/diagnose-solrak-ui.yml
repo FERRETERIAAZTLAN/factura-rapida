@@ -46,6 +46,10 @@ jobs:
           $ErrorActionPreference='Stop'
           Expand-Archive 'Factura_Rapida_Desktop_Windows_SAFE_0.1.4.zip' diag/base -Force
           Get-ChildItem diag/base -Recurse -File | Where-Object {$_.Name -match 'main.rs|lib.rs|tauri.conf.json|sync-web.mjs|index.html'} | ForEach-Object {Write-Host "SOURCE_FILE=$($_.FullName.Replace($PWD.Path,''))"}
+          Copy-Item index.html diag/index.html -Force
+          Copy-Item diag/base/desktop/src-tauri/src/main.rs diag/main.rs -Force
+          Copy-Item diag/base/desktop/src-tauri/tauri.conf.json diag/tauri.conf.json -Force
+          Copy-Item diag/base/desktop/scripts/sync-web.mjs diag/sync-web.mjs -Force
           $files=Get-ChildItem diag/base -Recurse -File | Where-Object {$_.Name -match 'main.rs|lib.rs|sync-web.mjs|tauri.conf.json'}
           foreach($file in $files){
             $txt=Get-Content $file.FullName -Raw
@@ -58,6 +62,10 @@ jobs:
         with:
           name: solrak-ui-diagnostic
           path: |
+            diag/index.html
+            diag/main.rs
+            diag/tauri.conf.json
+            diag/sync-web.mjs
             diag/metadata.json
             diag/chrome.png
             diag/chrome.log
