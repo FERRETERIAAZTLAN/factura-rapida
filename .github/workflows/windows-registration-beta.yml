@@ -67,7 +67,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $html = Get-Content beta/windows/dist/index.html -Raw
-          foreach ($marker in @('data-fr-production-clean="1"','data-fr-facturar-real="8"','data-fr-public-signup="1"','id="frSignupOpen"','tenant-public-signup','report_beta_ui_ready')) {
+          foreach ($marker in @('data-fr-production-clean="1"','data-fr-facturar-real="8"','data-fr-public-signup="1"',"openButton.id='frSignupOpen'",'tenant-public-signup','report_beta_ui_ready')) {
             if (-not $html.Contains($marker)) { throw "La beta perdió $marker" }
           }
           if (([regex]::Matches($html, 'data-fr-public-signup="1"')).Count -ne 2) { throw 'El registro se inyectó más de una vez o quedó incompleto' }
