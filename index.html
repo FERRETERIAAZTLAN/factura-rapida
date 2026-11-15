@@ -740,5 +740,35 @@ if(checkBtn)checkBtn.onclick=async()=>{msg.classList.remove('hidden');busy(true)
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',watchLogin);else watchLogin();
 })();
 </script>
+
+<style data-fr-payment-top="1">
+#tab-factura #frPaymentTop{border-color:#f0b08a;background:linear-gradient(180deg,#fffaf7,#fff);box-shadow:0 1px 5px rgba(235,108,25,.05)}
+#tab-factura #frPaymentTop .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+#tab-factura #frPaymentTop .card-head{margin-bottom:12px}
+@media(max-width:650px){#tab-factura #frPaymentTop .form-grid{grid-template-columns:1fr}}
+</style>
+<script data-fr-payment-top="1">
+(function(){
+ function relocatePayment(){
+  var tab=document.getElementById('tab-factura');
+  var client=document.getElementById('invoiceClient')?.closest('article');
+  var payment=document.getElementById('paymentForm')?.closest('article');
+  var product=document.getElementById('productSearch')?.closest('article');
+  var method=document.getElementById('paymentMethod');
+  if(!tab||!client||!payment||!product||!method)return;
+  if(!tab.contains(client)||!tab.contains(payment)||!tab.contains(product))return;
+  if(!client.parentElement||client.parentElement!==payment.parentElement||client.parentElement!==product.parentElement)return;
+  if(payment.previousElementSibling!==client)client.after(payment);
+  payment.id='frPaymentTop';
+  var a=payment.querySelector('.card-head h2'),b=product.querySelector('.card-head h2');
+  if(a)a.textContent='2 · Pago';
+  if(b)b.textContent='3 · Productos';
+  var label=method.closest('label');
+  if(label && label.firstChild && label.firstChild.nodeType===3)label.firstChild.nodeValue='Método de pago';
+  document.documentElement.dataset.frPaymentTop=(payment.previousElementSibling===client)?'1':'0';
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',relocatePayment,{once:true});else relocatePayment();
+})();
+</script>
 </body>
 </html>
