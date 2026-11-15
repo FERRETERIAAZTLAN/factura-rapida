@@ -1,0 +1,125 @@
+name: SOLRAK - Registro Beta aislado
+
+on:
+  push:
+    branches:
+      - codex/windows-public-registration-isolated
+    paths:
+      - ".github/workflows/windows-registration-beta.yml"
+      - "beta/**"
+      - "migrations/20261115_public_business_registration.sql"
+      - "supabase/functions/tenant-public-signup/**"
+      - "tests/public-registration-contract.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FR_PRODUCTION_UI_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/factura-desktop-production-ui-v15"
+  FR_SIGNUP_API_URL: "https://jojzhohqrshsjmlirkqz.supabase.co/functions/v1/tenant-public-signup"
+
+jobs:
+  validate-and-build:
+    runs-on: windows-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Descargar copia aislada
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Preparar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Ejecutar contratos de seguridad
+        shell: pwsh
+        run: node tests/public-registration-contract.mjs
+
+      - name: Tomar una copia de la interfaz funcional
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri $env:FR_PRODUCTION_UI_URL -OutFile beta/index.html -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -TimeoutSec 40
+          $html = Get-Content beta/index.html -Raw
+          foreach ($marker in @('data-fr-production-clean="1"','data-fr-facturar-real="8"','data-fr-login-clean="1"','cfdi-issue-api','FACTURAR')) {
+            if (-not $html.Contains($marker)) { throw "La copia funcional no contiene $marker" }
+          }
+          if ($html.Contains('data-fr-public-signup="1"')) { throw 'La interfaz funcional ya fue modificada' }
+
+      - name: Añadir registro solamente a la copia
+        shell: pwsh
+        run: node beta/scripts/inject-registration.mjs beta/index.html
+
+      - name: Preparar aplicación beta
+        working-directory: beta/windows
+        shell: pwsh
+        run: |
+          npm ci --no-audit --no-fund
+          npm run sync-web
+
+      - name: Validar interfaz empaquetada
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $html = Get-Content beta/windows/dist/index.html -Raw
+          foreach ($marker in @('data-fr-production-clean="1"','data-fr-facturar-real="8"','data-fr-public-signup="1"','id="frSignupOpen"','tenant-public-signup','report_beta_ui_ready')) {
+            if (-not $html.Contains($marker)) { throw "La beta perdió $marker" }
+          }
+          if (([regex]::Matches($html, 'data-fr-public-signup="1"')).Count -ne 2) { throw 'El registro se inyectó más de una vez o quedó incompleto' }
+          @'
+          import fs from 'node:fs';
+          import vm from 'node:vm';
+          const html=fs.readFileSync('beta/windows/dist/index.html','utf8');
+          const scripts=[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+          let checked=0;
+          for(let i=0;i<scripts.length;i++){
+            if(/\bsrc=["'][^"']+/i.test(scripts[i][1]))continue;
+            new vm.Script(scripts[i][2],{filename:`beta-inline-${i+1}.js`});checked++;
+          }
+          if(!checked)throw Error('No se validaron scripts inline');
+          console.log(`BETA_INLINE_JS_OK checked=${checked}`);
+          '@ | Set-Content beta-validate-inline.mjs -Encoding utf8
+          node beta-validate-inline.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git diff --exit-code -- index.html supabase/functions/factura-desktop-production-ui-v15/index.ts
+
+      - name: Compilar instalador independiente
+        working-directory: beta/windows
+        shell: pwsh
+        run: npm run tauri -- build --bundles nsis
+
+      - name: Probar apertura y pantalla de registro
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Get-ChildItem beta/windows/src-tauri/target/release -File -Filter '*.exe' | Where-Object { $_.Name -notmatch 'setup' } | Sort-Object Length -Descending | Select-Object -First 1
+          if (-not $exe) { throw 'No se encontró el ejecutable beta' }
+          $log = Join-Path $env:TEMP 'solrak-registration-beta-startup.log'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          $process = Start-Process -FilePath $exe.FullName -PassThru
+          try {
+            $ready = $false
+            for ($i=0; $i -lt 35; $i++) {
+              Start-Sleep -Seconds 1
+              if ($process.HasExited) { throw "La beta se cerró durante el arranque. ExitCode=$($process.ExitCode)" }
+              $contents = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+              if ($contents.Contains('BETA_UI_READY_MISSING')) { throw 'La beta abrió sin el formulario de registro' }
+              if ($contents.Contains('BETA_UI_READY_VISIBLE')) { $ready = $true; break }
+            }
+            if (-not $ready) { throw 'La beta no confirmó una interfaz visible' }
+          } finally {
+            if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+          }
+
+      - name: Guardar instalador de prueba
+        uses: actions/upload-artifact@v4
+        with:
+          name: SOLRAK-Registro-Beta-Windows
+          path: beta/windows/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14

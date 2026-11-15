@@ -1,0 +1,5 @@
+beta/index.html
+beta/test-artifacts/
+beta/windows/dist/
+beta/windows/node_modules/
+beta/windows/src-tauri/target/
