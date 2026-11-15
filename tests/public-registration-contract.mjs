@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import {
   businessCodeCandidate,
@@ -14,7 +15,7 @@ import {
   usernameIsValid,
 } from "../supabase/functions/tenant-public-signup/registration-core.js";
 
-const root = resolve(new URL("..", import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const migrationPath = join(root, "migrations/20261115_public_business_registration.sql");
 const edgePath = join(root, "supabase/functions/tenant-public-signup/index.ts");
 const injectorPath = join(root, "beta/scripts/inject-registration.mjs");
