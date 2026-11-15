@@ -1,0 +1,77 @@
+name: Publicar SOLRAK Registro Beta
+
+on:
+  push:
+    branches:
+      - codex/windows-public-registration-isolated
+    paths:
+      - ".github/workflows/windows-registration-beta-publish.yml"
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_RUN_ID: "43691098564"
+  SOURCE_HEAD_SHA: "e91a37480185bf4a9934015e9d0e67560df69fe3"
+  EXPECTED_INSTALLER_SHA256: "a1011b5b0bd8c9fd630a02532ca105923d22545d718e996a48a4f18e9bc72818"
+  RELEASE_TAG: "registration-beta-v0.3.0-beta.1"
+
+jobs:
+  publish-verified-installer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Verificar compilación aprobada
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.status')"
+          conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.conclusion')"
+          head_sha="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.head_sha')"
+          test "$status" = "completed"
+          test "$conclusion" = "success"
+          test "$head_sha" = "$SOURCE_HEAD_SHA"
+
+      - name: Descargar instalador verificado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifact release
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "SOLRAK-Registro-Beta-Windows" --dir artifact
+          mapfile -t installers < <(find artifact -type f -name '*.exe')
+          test "${#installers[@]}" -eq 1
+          cp "${installers[0]}" "release/SOLRAK-Registro-Beta-Windows-0.3.0-beta.1.exe"
+          echo "${EXPECTED_INSTALLER_SHA256}  release/SOLRAK-Registro-Beta-Windows-0.3.0-beta.1.exe" | sha256sum --check --strict
+          printf '%s  %s\n' "$EXPECTED_INSTALLER_SHA256" "SOLRAK-Registro-Beta-Windows-0.3.0-beta.1.exe" > release/SHA256SUMS.txt
+
+      - name: Preparar notas de la versión
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## SOLRAK Registro Beta para Windows
+
+          Esta es una versión preliminar separada. Se instala como **SOLRAK Registro Beta** y no reemplaza ni actualiza SOLRAK estable.
+
+          Incluye:
+
+          - Registro de un negocio nuevo con verificación por correo.
+          - Administrador propio con usuario y PIN de 6 a 8 dígitos.
+          - Datos separados por negocio.
+          - Configuración fiscal inicial en modo de pruebas; no timbra CFDI reales hasta completar CSD y PAC.
+
+          El instalador fue compilado y abierto automáticamente en Windows antes de publicarse. Como no se compró un certificado comercial de firma, Windows puede mostrar **Editor desconocido**. La huella SHA-256 se incluye en `SHA256SUMS.txt` para verificar el archivo.
+          EOF
+
+      - name: Publicar versión preliminar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "SOLRAK Registro Beta 0.3.0-beta.1" --notes-file release-notes.md --prerelease
+            gh release upload "$RELEASE_TAG" release/*.exe release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$RELEASE_TAG" release/*.exe release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$SOURCE_HEAD_SHA" --title "SOLRAK Registro Beta 0.3.0-beta.1" --notes-file release-notes.md --prerelease
+          fi
