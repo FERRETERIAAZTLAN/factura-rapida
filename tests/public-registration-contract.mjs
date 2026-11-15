@@ -61,6 +61,8 @@ for (const name of [
 assert.equal((migration.match(/security definer/g) || []).length, 4);
 assert.equal((migration.match(/set search_path = ''/g) || []).length, 4);
 assert.ok(migration.includes("enable row level security"));
+assert.ok(migration.includes("public_signup_requests_business_idx"));
+assert.ok(migration.includes("public_signup_requests_admin_user_idx"));
 assert.ok(migration.includes("v_recent_email >= 3"));
 assert.ok(migration.includes("v_recent_ip >= 6"));
 assert.ok(migration.includes("v_recent_global >= 100"));

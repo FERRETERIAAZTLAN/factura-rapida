@@ -32,6 +32,12 @@ create index if not exists public_signup_requests_expires_idx
   on private.public_signup_requests (expires_at)
   where completed_at is null;
 
+create index if not exists public_signup_requests_business_idx
+  on private.public_signup_requests (business_id);
+
+create index if not exists public_signup_requests_admin_user_idx
+  on private.public_signup_requests (admin_user_id);
+
 revoke all on table private.public_signup_requests from public, anon, authenticated;
 grant select, insert, update on table private.public_signup_requests to service_role;
 
